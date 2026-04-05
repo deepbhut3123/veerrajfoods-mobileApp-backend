@@ -1,12 +1,6 @@
 const Route = require('../models/Route');
 const Shop = require('../models/Shop');
-
-const buildImageUrl = (req, fileName) => {
-  if (!fileName) {
-    return '';
-  }
-  return `${req.protocol}://${req.get('host')}/uploads/shops/${fileName}`;
-};
+const { uploadBufferToCloudinary } = require('../middlewares/uploadMiddleware');
 
 const canManageShop = (req, shop) => {
   if (!req.user || !shop) {
@@ -54,11 +48,11 @@ const createShop = async (req, res) => {
       });
     }
 
-    const finalImage = req.file
-      ? buildImageUrl(req, req.file.filename)
-      : imageUrl && String(imageUrl).trim()
-      ? String(imageUrl).trim()
-      : '';
+    let finalImage = imageUrl && String(imageUrl).trim() ? String(imageUrl).trim() : '';
+    if (req.file?.buffer) {
+      const uploaded = await uploadBufferToCloudinary(req.file.buffer);
+      finalImage = uploaded.secure_url || uploaded.url || '';
+    }
 
     const created = await Shop.create({
       routeId,
@@ -120,11 +114,11 @@ const updateShop = async (req, res) => {
       });
     }
 
-    const nextImage = req.file
-      ? buildImageUrl(req, req.file.filename)
-      : imageUrl && String(imageUrl).trim()
-      ? String(imageUrl).trim()
-      : shop.shopImage;
+    let nextImage = imageUrl && String(imageUrl).trim() ? String(imageUrl).trim() : shop.shopImage;
+    if (req.file?.buffer) {
+      const uploaded = await uploadBufferToCloudinary(req.file.buffer);
+      nextImage = uploaded.secure_url || uploaded.url || shop.shopImage;
+    }
 
     shop.routeId = routeId;
     shop.shopName = shopName.trim();
