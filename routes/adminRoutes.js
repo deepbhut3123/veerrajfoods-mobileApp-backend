@@ -1,5 +1,6 @@
 const express = require('express');
 const { protect, requireAdmin } = require('../middlewares/authMiddleware');
+const { parseShopImageUpload } = require('../middlewares/uploadMiddleware');
 const {
   createRoute,
   getAllRoutes,
@@ -7,7 +8,14 @@ const {
   updateRoute,
   deleteRoute,
 } = require('../controllers/routeController');
-const { getAllShops } = require('../controllers/shopController');
+const {
+  createShop,
+  updateShop,
+  deleteShop,
+  getMyShops,
+  getShopRoutes,
+  getAllShops,
+} = require('../controllers/shopController');
 
 const router = express.Router();
 
@@ -31,6 +39,11 @@ router.get('/routes/:id', requireAdmin, getRouteById);
 router.put('/routes/:id', requireAdmin, updateRoute);
 router.delete('/routes/:id', requireAdmin, deleteRoute);
 
+router.get('/shops/routes', getShopRoutes);
+router.post('/shops', parseShopImageUpload, createShop);
+router.get('/shops/my-shops', getMyShops);
+router.put('/shops/:id', parseShopImageUpload, updateShop);
+router.delete('/shops/:id', deleteShop);
 router.get('/shops', requireAdmin, getAllShops);
 
 module.exports = router;

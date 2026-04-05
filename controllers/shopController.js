@@ -2,6 +2,22 @@ const Route = require('../models/Route');
 const Shop = require('../models/Shop');
 const { uploadBufferToCloudinary } = require('../middlewares/uploadMiddleware');
 
+const getValidationMessage = (error, fallback) => {
+  if (!error || typeof error !== 'object') {
+    return fallback;
+  }
+
+  if (error.name === 'ValidationError' && error.errors && typeof error.errors === 'object') {
+    const firstError = Object.values(error.errors)[0];
+    if (firstError && typeof firstError.message === 'string' && firstError.message.trim()) {
+      return firstError.message;
+    }
+    return 'Validation failed';
+  }
+
+  return fallback;
+};
+
 const canManageShop = (req, shop) => {
   if (!req.user || !shop) {
     return false;
@@ -14,13 +30,16 @@ const canManageShop = (req, shop) => {
 
 const getShopRoutes = async (_req, res) => {
   try {
+    console.log('[shops-controller] getShopRoutes request');
     const routes = await Route.find({}).sort({ createdAt: -1 });
+    console.log('[shops-controller] getShopRoutes success', { count: routes.length });
     return res.status(200).json({
       success: true,
       message: 'Routes fetched successfully',
       data: routes,
     });
   } catch (error) {
+    console.error('[shops-controller] getShopRoutes error', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch routes',
@@ -32,6 +51,13 @@ const getShopRoutes = async (_req, res) => {
 const createShop = async (req, res) => {
   try {
     const { routeId, shopName, shopAddress, imageUrl } = req.body;
+    console.log('[shops-controller] createShop request', {
+      routeId,
+      shopName,
+      hasFile: Boolean(req.file?.buffer),
+      hasImageUrl: Boolean(imageUrl),
+      userId: req.user?._id,
+    });
 
     if (!routeId || !shopName || !shopAddress) {
       return res.status(400).json({
@@ -52,6 +78,9 @@ const createShop = async (req, res) => {
     if (req.file?.buffer) {
       const uploaded = await uploadBufferToCloudinary(req.file.buffer);
       finalImage = uploaded.secure_url || uploaded.url || '';
+      console.log('[shops-controller] createShop cloudinary upload success', {
+        hasSecureUrl: Boolean(uploaded.secure_url),
+      });
     }
 
     const created = await Shop.create({
@@ -72,6 +101,14 @@ const createShop = async (req, res) => {
       data: populated,
     });
   } catch (error) {
+    console.error('[shops-controller] createShop error', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: getValidationMessage(error, 'Invalid shop data'),
+        error: error.message,
+      });
+    }
     return res.status(500).json({
       success: false,
       message: 'Failed to create shop',
@@ -83,6 +120,14 @@ const createShop = async (req, res) => {
 const updateShop = async (req, res) => {
   try {
     const { routeId, shopName, shopAddress, imageUrl } = req.body;
+    console.log('[shops-controller] updateShop request', {
+      id: req.params.id,
+      routeId,
+      shopName,
+      hasFile: Boolean(req.file?.buffer),
+      hasImageUrl: Boolean(imageUrl),
+      userId: req.user?._id,
+    });
 
     if (!routeId || !shopName || !shopAddress) {
       return res.status(400).json({
@@ -118,6 +163,9 @@ const updateShop = async (req, res) => {
     if (req.file?.buffer) {
       const uploaded = await uploadBufferToCloudinary(req.file.buffer);
       nextImage = uploaded.secure_url || uploaded.url || shop.shopImage;
+      console.log('[shops-controller] updateShop cloudinary upload success', {
+        hasSecureUrl: Boolean(uploaded.secure_url),
+      });
     }
 
     shop.routeId = routeId;
@@ -137,6 +185,14 @@ const updateShop = async (req, res) => {
       data: populated,
     });
   } catch (error) {
+    console.error('[shops-controller] updateShop error', error);
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: getValidationMessage(error, 'Invalid shop data'),
+        error: error.message,
+      });
+    }
     return res.status(500).json({
       success: false,
       message: 'Failed to update shop',
@@ -147,6 +203,10 @@ const updateShop = async (req, res) => {
 
 const deleteShop = async (req, res) => {
   try {
+    console.log('[shops-controller] deleteShop request', {
+      id: req.params.id,
+      userId: req.user?._id,
+    });
     const shop = await Shop.findById(req.params.id);
     if (!shop) {
       return res.status(404).json({
@@ -170,6 +230,7 @@ const deleteShop = async (req, res) => {
       data: shop,
     });
   } catch (error) {
+    console.error('[shops-controller] deleteShop error', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete shop',
@@ -180,6 +241,7 @@ const deleteShop = async (req, res) => {
 
 const getMyShops = async (req, res) => {
   try {
+    console.log('[shops-controller] getMyShops request', { userId: req.user?._id });
     const shops = await Shop.find({ userId: req.user._id })
       .populate('routeId', 'routeName')
       .populate('userId', 'name email roleId')
@@ -191,6 +253,7 @@ const getMyShops = async (req, res) => {
       data: shops,
     });
   } catch (error) {
+    console.error('[shops-controller] getMyShops error', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch your shops',
@@ -201,6 +264,7 @@ const getMyShops = async (req, res) => {
 
 const getAllShops = async (_req, res) => {
   try {
+    console.log('[shops-controller] getAllShops request');
     const shops = await Shop.find({})
       .populate('routeId', 'routeName')
       .populate('userId', 'name email roleId')
@@ -212,6 +276,7 @@ const getAllShops = async (_req, res) => {
       data: shops,
     });
   } catch (error) {
+    console.error('[shops-controller] getAllShops error', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch shops',

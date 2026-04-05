@@ -2,13 +2,13 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+
+dotenv.config();
+
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const adminRoutes = require('./routes/adminRoutes');
-const shopRoutes = require('./routes/shopRoutes');
-
-dotenv.config();
 
 const app = express();
 
@@ -21,7 +21,14 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api', publicRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/shops', shopRoutes);
+
+app.use((error, _req, res, _next) => {
+  console.error('Unhandled server error:', error);
+  res.status(500).json({
+    success: false,
+    message: error?.message || 'Internal server error',
+  });
+});
 
 app.use((req, res) => {
   res.status(404).json({
