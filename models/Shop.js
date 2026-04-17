@@ -24,6 +24,14 @@ const shopSchema = new mongoose.Schema(
       trim: true,
       minlength: [5, 'shopAddress must be at least 5 characters'],
     },
+    latitude: {
+      type: Number,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      default: null,
+    },
     shopImage: {
       type: String,
       default: '',

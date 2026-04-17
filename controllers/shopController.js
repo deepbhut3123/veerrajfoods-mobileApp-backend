@@ -18,6 +18,19 @@ const getValidationMessage = (error, fallback) => {
   return fallback;
 };
 
+const normalizeCoordinate = (value, min, max) => {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+    return NaN;
+  }
+
+  return parsed;
+};
+
 const canManageShop = (req, shop) => {
   if (!req.user || !shop) {
     return false;
@@ -30,16 +43,13 @@ const canManageShop = (req, shop) => {
 
 const getShopRoutes = async (_req, res) => {
   try {
-    console.log('[shops-controller] getShopRoutes request');
     const routes = await Route.find({}).sort({ createdAt: -1 });
-    console.log('[shops-controller] getShopRoutes success', { count: routes.length });
     return res.status(200).json({
       success: true,
       message: 'Routes fetched successfully',
       data: routes,
     });
   } catch (error) {
-    console.error('[shops-controller] getShopRoutes error', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch routes',
@@ -50,14 +60,7 @@ const getShopRoutes = async (_req, res) => {
 
 const createShop = async (req, res) => {
   try {
-    const { routeId, shopName, shopAddress, imageUrl } = req.body;
-    console.log('[shops-controller] createShop request', {
-      routeId,
-      shopName,
-      hasFile: Boolean(req.file?.buffer),
-      hasImageUrl: Boolean(imageUrl),
-      userId: req.user?._id,
-    });
+    const { routeId, shopName, shopAddress, imageUrl, latitude, longitude } = req.body;
 
     if (!routeId || !shopName || !shopAddress) {
       return res.status(400).json({
@@ -78,8 +81,23 @@ const createShop = async (req, res) => {
     if (req.file?.buffer) {
       const uploaded = await uploadBufferToCloudinary(req.file.buffer);
       finalImage = uploaded.secure_url || uploaded.url || '';
-      console.log('[shops-controller] createShop cloudinary upload success', {
-        hasSecureUrl: Boolean(uploaded.secure_url),
+    }
+
+    const parsedLatitude = normalizeCoordinate(latitude, -90, 90);
+    const parsedLongitude = normalizeCoordinate(longitude, -180, 180);
+    const hasLocation = parsedLatitude !== null || parsedLongitude !== null;
+
+    if (hasLocation && (parsedLatitude === null || parsedLongitude === null)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both latitude and longitude are required when saving location',
+      });
+    }
+
+    if (Number.isNaN(parsedLatitude) || Number.isNaN(parsedLongitude)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid latitude/longitude coordinates',
       });
     }
 
@@ -88,6 +106,8 @@ const createShop = async (req, res) => {
       userId: req.user._id,
       shopName: shopName.trim(),
       shopAddress: shopAddress.trim(),
+      latitude: hasLocation ? parsedLatitude : null,
+      longitude: hasLocation ? parsedLongitude : null,
       shopImage: finalImage,
     });
 
@@ -101,7 +121,6 @@ const createShop = async (req, res) => {
       data: populated,
     });
   } catch (error) {
-    console.error('[shops-controller] createShop error', error);
     if (error?.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
@@ -119,15 +138,7 @@ const createShop = async (req, res) => {
 
 const updateShop = async (req, res) => {
   try {
-    const { routeId, shopName, shopAddress, imageUrl } = req.body;
-    console.log('[shops-controller] updateShop request', {
-      id: req.params.id,
-      routeId,
-      shopName,
-      hasFile: Boolean(req.file?.buffer),
-      hasImageUrl: Boolean(imageUrl),
-      userId: req.user?._id,
-    });
+    const { routeId, shopName, shopAddress, imageUrl, latitude, longitude } = req.body;
 
     if (!routeId || !shopName || !shopAddress) {
       return res.status(400).json({
@@ -163,14 +174,33 @@ const updateShop = async (req, res) => {
     if (req.file?.buffer) {
       const uploaded = await uploadBufferToCloudinary(req.file.buffer);
       nextImage = uploaded.secure_url || uploaded.url || shop.shopImage;
-      console.log('[shops-controller] updateShop cloudinary upload success', {
-        hasSecureUrl: Boolean(uploaded.secure_url),
+    }
+
+    const parsedLatitude = normalizeCoordinate(latitude, -90, 90);
+    const parsedLongitude = normalizeCoordinate(longitude, -180, 180);
+    const hasLocation = parsedLatitude !== null || parsedLongitude !== null;
+
+    if (hasLocation && (parsedLatitude === null || parsedLongitude === null)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both latitude and longitude are required when saving location',
+      });
+    }
+
+    if (Number.isNaN(parsedLatitude) || Number.isNaN(parsedLongitude)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid latitude/longitude coordinates',
       });
     }
 
     shop.routeId = routeId;
     shop.shopName = shopName.trim();
     shop.shopAddress = shopAddress.trim();
+    if (hasLocation) {
+      shop.latitude = parsedLatitude;
+      shop.longitude = parsedLongitude;
+    }
     shop.shopImage = nextImage;
 
     await shop.save();
@@ -185,7 +215,6 @@ const updateShop = async (req, res) => {
       data: populated,
     });
   } catch (error) {
-    console.error('[shops-controller] updateShop error', error);
     if (error?.name === 'ValidationError') {
       return res.status(400).json({
         success: false,
@@ -203,10 +232,6 @@ const updateShop = async (req, res) => {
 
 const deleteShop = async (req, res) => {
   try {
-    console.log('[shops-controller] deleteShop request', {
-      id: req.params.id,
-      userId: req.user?._id,
-    });
     const shop = await Shop.findById(req.params.id);
     if (!shop) {
       return res.status(404).json({
@@ -230,7 +255,6 @@ const deleteShop = async (req, res) => {
       data: shop,
     });
   } catch (error) {
-    console.error('[shops-controller] deleteShop error', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to delete shop',
@@ -241,7 +265,6 @@ const deleteShop = async (req, res) => {
 
 const getMyShops = async (req, res) => {
   try {
-    console.log('[shops-controller] getMyShops request', { userId: req.user?._id });
     const shops = await Shop.find({ userId: req.user._id })
       .populate('routeId', 'routeName')
       .populate('userId', 'name email roleId')
@@ -253,7 +276,6 @@ const getMyShops = async (req, res) => {
       data: shops,
     });
   } catch (error) {
-    console.error('[shops-controller] getMyShops error', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch your shops',
@@ -264,7 +286,6 @@ const getMyShops = async (req, res) => {
 
 const getAllShops = async (_req, res) => {
   try {
-    console.log('[shops-controller] getAllShops request');
     const shops = await Shop.find({})
       .populate('routeId', 'routeName')
       .populate('userId', 'name email roleId')
@@ -276,7 +297,6 @@ const getAllShops = async (_req, res) => {
       data: shops,
     });
   } catch (error) {
-    console.error('[shops-controller] getAllShops error', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch shops',

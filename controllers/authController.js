@@ -14,6 +14,7 @@ const sanitizeUser = (user) => ({
   name: user.name,
   email: user.email,
   roleId: user.roleId,
+  isActive: user.isActive !== false,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
@@ -52,6 +53,7 @@ const register = async (req, res) => {
       email,
       password: hashedPassword,
       roleId: parsedRoleId,
+      isActive: true,
     });
 
     const token = signToken(user._id);
@@ -88,6 +90,13 @@ const login = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password',
+      });
+    }
+
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been deactivated. Please contact admin.',
       });
     }
 

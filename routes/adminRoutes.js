@@ -16,6 +16,10 @@ const {
   getShopRoutes,
   getAllShops,
 } = require('../controllers/shopController');
+const {
+  getAllUsers,
+  updateUserActiveStatus,
+} = require('../controllers/userAdminController');
 
 const router = express.Router();
 
@@ -45,5 +49,8 @@ router.get('/shops/my-shops', getMyShops);
 router.put('/shops/:id', parseShopImageUpload, updateShop);
 router.delete('/shops/:id', deleteShop);
 router.get('/shops', requireAdmin, getAllShops);
+
+router.get('/users', requireAdmin, getAllUsers);
+router.patch('/users/:id/status', requireAdmin, updateUserActiveStatus);
 
 module.exports = router;

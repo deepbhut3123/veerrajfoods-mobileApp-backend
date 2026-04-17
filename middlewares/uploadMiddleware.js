@@ -19,7 +19,6 @@ const uploadShopImage = multer({
 
 const uploadBufferToCloudinary = (fileBuffer, folder = 'veerrajfoods/shops') =>
   new Promise((resolve, reject) => {
-    console.log('[shops-upload] cloudinary upload start', { folder });
     const stream = cloudinary.uploader.upload_stream(
       {
         folder,
@@ -27,14 +26,9 @@ const uploadBufferToCloudinary = (fileBuffer, folder = 'veerrajfoods/shops') =>
       },
       (error, result) => {
         if (error) {
-          console.error('[shops-upload] cloudinary upload error', error);
           reject(error);
           return;
         }
-        console.log('[shops-upload] cloudinary upload success', {
-          public_id: result?.public_id,
-          secure_url: Boolean(result?.secure_url),
-        });
         resolve(result);
       },
     );
@@ -45,17 +39,11 @@ const uploadBufferToCloudinary = (fileBuffer, folder = 'veerrajfoods/shops') =>
 const parseShopImageUpload = (req, res, next) => {
   uploadShopImage.single('image')(req, res, (error) => {
     if (!error) {
-      console.log('[shops-upload] parse success', {
-        hasFile: Boolean(req.file),
-        mimeType: req.file?.mimetype || null,
-        size: req.file?.size || 0,
-      });
       next();
       return;
     }
 
     if (error instanceof multer.MulterError) {
-      console.error('[shops-upload] multer error', { code: error.code, message: error.message });
       if (error.code === 'LIMIT_FILE_SIZE') {
         res.status(413).json({
           success: false,
@@ -70,7 +58,6 @@ const parseShopImageUpload = (req, res, next) => {
       return;
     }
 
-    console.error('[shops-upload] invalid file error', { message: error.message });
     res.status(400).json({
       success: false,
       message: error.message || 'Invalid image file.',
