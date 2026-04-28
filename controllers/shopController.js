@@ -60,12 +60,12 @@ const getShopRoutes = async (_req, res) => {
 
 const createShop = async (req, res) => {
   try {
-    const { routeId, shopName, shopAddress, imageUrl, latitude, longitude } = req.body;
+    const { routeId, shopName, shopAddress, mobileNumber, imageUrl, latitude, longitude } = req.body;
 
-    if (!routeId || !shopName || !shopAddress) {
+    if (!routeId || !shopName || !shopAddress || !mobileNumber) {
       return res.status(400).json({
         success: false,
-        message: 'routeId, shopName and shopAddress are required',
+        message: 'routeId, shopName, shopAddress and mobileNumber are required',
       });
     }
 
@@ -106,6 +106,7 @@ const createShop = async (req, res) => {
       userId: req.user._id,
       shopName: shopName.trim(),
       shopAddress: shopAddress.trim(),
+      mobileNumber: mobileNumber.trim(),
       latitude: hasLocation ? parsedLatitude : null,
       longitude: hasLocation ? parsedLongitude : null,
       shopImage: finalImage,
@@ -138,12 +139,12 @@ const createShop = async (req, res) => {
 
 const updateShop = async (req, res) => {
   try {
-    const { routeId, shopName, shopAddress, imageUrl, latitude, longitude } = req.body;
+    const { routeId, shopName, shopAddress, mobileNumber, imageUrl, latitude, longitude } = req.body;
 
-    if (!routeId || !shopName || !shopAddress) {
+    if (!routeId || !shopName || !shopAddress || !mobileNumber) {
       return res.status(400).json({
         success: false,
-        message: 'routeId, shopName and shopAddress are required',
+        message: 'routeId, shopName, shopAddress and mobileNumber are required',
       });
     }
 
@@ -197,6 +198,7 @@ const updateShop = async (req, res) => {
     shop.routeId = routeId;
     shop.shopName = shopName.trim();
     shop.shopAddress = shopAddress.trim();
+    shop.mobileNumber = mobileNumber.trim();
     if (hasLocation) {
       shop.latitude = parsedLatitude;
       shop.longitude = parsedLongitude;

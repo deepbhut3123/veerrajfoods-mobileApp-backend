@@ -24,6 +24,12 @@ const shopSchema = new mongoose.Schema(
       trim: true,
       minlength: [5, 'shopAddress must be at least 5 characters'],
     },
+    mobileNumber: {
+      type: String,
+      required: [true, 'mobileNumber is required'],
+      trim: true,
+      match: [/^\d{10}$/, 'mobileNumber must be exactly 10 digits'],
+    },
     latitude: {
       type: Number,
       default: null,
