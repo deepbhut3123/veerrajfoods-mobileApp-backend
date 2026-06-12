@@ -43,6 +43,16 @@ const userSchema = new mongoose.Schema(
       default: null,
       select: false,
     },
+    loginVerificationCode: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    loginVerificationExpires: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
   {
     timestamps: true,

@@ -2,12 +2,20 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { sendVerificationCodeToAdmin } = require('../config/mail');
+
+const LOGIN_VERIFICATION_EXPIRES_MS = 10 * 60 * 1000;
 
 const signToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   });
 };
+
+const signVerificationToken = (userId) =>
+  jwt.sign({ id: userId, purpose: 'login-verification' }, process.env.JWT_SECRET, {
+    expiresIn: '10m',
+  });
 
 const sanitizeUser = (user) => ({
   id: user._id,
@@ -18,6 +26,9 @@ const sanitizeUser = (user) => ({
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
+
+const generateVerificationCode = () =>
+  String(Math.floor(100000 + Math.random() * 900000));
 
 const register = async (req, res) => {
   try {
@@ -109,6 +120,136 @@ const login = async (req, res) => {
       });
     }
 
+    if (user.roleId === 1) {
+      const token = signToken(user._id);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Login successful',
+        token,
+        user: sanitizeUser(user),
+      });
+    }
+
+    const verificationCode = generateVerificationCode();
+    const verificationCodeHash = crypto
+      .createHash('sha256')
+      .update(verificationCode)
+      .digest('hex');
+    const verificationExpiresAt = new Date(Date.now() + LOGIN_VERIFICATION_EXPIRES_MS);
+
+    user.loginVerificationCode = verificationCodeHash;
+    user.loginVerificationExpires = verificationExpiresAt;
+    await user.save();
+
+    const emailResult = await sendVerificationCodeToAdmin({
+      user,
+      code: verificationCode,
+    });
+    const verificationToken = signVerificationToken(user._id);
+
+    return res.status(202).json({
+      success: true,
+      message: emailResult.delivered
+        ? 'Verification code sent to admin email'
+        : 'Verification code generated. Configure SMTP to send it by email.',
+      requiresVerification: true,
+      verificationToken,
+      adminEmail: emailResult.adminEmail,
+      user: sanitizeUser(user),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to login',
+      error: error.message,
+    });
+  }
+};
+
+const verifyLoginCode = async (req, res) => {
+  try {
+    const { verificationToken, code } = req.body;
+
+    if (!verificationToken || !code) {
+      return res.status(400).json({
+        success: false,
+        message: 'verificationToken and code are required',
+      });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(verificationToken, process.env.JWT_SECRET);
+    } catch (_error) {
+      return res.status(401).json({
+        success: false,
+        message: 'Verification session expired. Please login again.',
+      });
+    }
+
+    if (!decoded || decoded.purpose !== 'login-verification' || !decoded.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid verification session. Please login again.',
+      });
+    }
+
+    const user = await User.findById(decoded.id).select(
+      '+loginVerificationCode +loginVerificationExpires',
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your account has been deactivated. Please contact admin.',
+      });
+    }
+
+    if (user.roleId === 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin login does not require verification code',
+      });
+    }
+
+    if (!user.loginVerificationCode || !user.loginVerificationExpires) {
+      return res.status(400).json({
+        success: false,
+        message: 'No verification code is pending for this account',
+      });
+    }
+
+    if (user.loginVerificationExpires.getTime() < Date.now()) {
+      user.loginVerificationCode = null;
+      user.loginVerificationExpires = null;
+      await user.save();
+
+      return res.status(400).json({
+        success: false,
+        message: 'Verification code expired. Please login again.',
+      });
+    }
+
+    const codeHash = crypto.createHash('sha256').update(String(code)).digest('hex');
+    if (codeHash !== user.loginVerificationCode) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid verification code',
+      });
+    }
+
+    user.loginVerificationCode = null;
+    user.loginVerificationExpires = null;
+    await user.save();
+
     const token = signToken(user._id);
 
     return res.status(200).json({
@@ -120,7 +261,7 @@ const login = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: 'Failed to login',
+      message: 'Failed to verify login code',
       error: error.message,
     });
   }
@@ -214,6 +355,7 @@ const resetPassword = async (req, res) => {
 module.exports = {
   register,
   login,
+  verifyLoginCode,
   forgotPassword,
   resetPassword,
 };

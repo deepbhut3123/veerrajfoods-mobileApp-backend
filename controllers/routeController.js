@@ -2,16 +2,20 @@ const Route = require('../models/Route');
 
 const createRoute = async (req, res) => {
   try {
-    const { routeName } = req.body;
+    const { routeName, cityName } = req.body;
 
-    if (!routeName || !routeName.trim()) {
+    if (!routeName || !routeName.trim() || !cityName || !cityName.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'routeName is required',
+        message: 'routeName and cityName are required',
       });
     }
 
-    const created = await Route.create({ routeName: routeName.trim() });
+    const created = await Route.create({
+      userId: req.user._id,
+      routeName: routeName.trim(),
+      cityName: cityName.trim(),
+    });
 
     return res.status(201).json({
       success: true,
@@ -27,9 +31,9 @@ const createRoute = async (req, res) => {
   }
 };
 
-const getAllRoutes = async (_req, res) => {
+const getAllRoutes = async (req, res) => {
   try {
-    const routes = await Route.find({}).sort({ createdAt: -1 });
+    const routes = await Route.find({ userId: req.user._id }).sort({ createdAt: -1 });
     return res.status(200).json({
       success: true,
       message: 'Routes fetched successfully',
@@ -46,7 +50,7 @@ const getAllRoutes = async (_req, res) => {
 
 const getRouteById = async (req, res) => {
   try {
-    const route = await Route.findById(req.params.id);
+    const route = await Route.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (!route) {
       return res.status(404).json({
@@ -71,18 +75,18 @@ const getRouteById = async (req, res) => {
 
 const updateRoute = async (req, res) => {
   try {
-    const { routeName } = req.body;
+    const { routeName, cityName } = req.body;
 
-    if (!routeName || !routeName.trim()) {
+    if (!routeName || !routeName.trim() || !cityName || !cityName.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'routeName is required',
+        message: 'routeName and cityName are required',
       });
     }
 
-    const updated = await Route.findByIdAndUpdate(
-      req.params.id,
-      { routeName: routeName.trim() },
+    const updated = await Route.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user._id },
+      { routeName: routeName.trim(), cityName: cityName.trim() },
       { new: true, runValidators: true }
     );
 
@@ -109,7 +113,7 @@ const updateRoute = async (req, res) => {
 
 const deleteRoute = async (req, res) => {
   try {
-    const deleted = await Route.findByIdAndDelete(req.params.id);
+    const deleted = await Route.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
 
     if (!deleted) {
       return res.status(404).json({

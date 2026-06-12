@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const { protect, requireAdmin } = require('../middlewares/authMiddleware');
 const { parseShopImageUpload } = require('../middlewares/uploadMiddleware');
 const {
@@ -9,6 +9,13 @@ const {
   deleteRoute,
 } = require('../controllers/routeController');
 const {
+  createProduct,
+  getAllProducts,
+  getProductById,
+  updateProduct,
+  deleteProduct,
+} = require('../controllers/productController');
+const {
   createShop,
   updateShop,
   deleteShop,
@@ -17,13 +24,28 @@ const {
   getAllShops,
 } = require('../controllers/shopController');
 const {
+  createBill,
+  getMyBills,
+  getBillProducts,
+} = require('../controllers/billController');
+const {
+  getAdminDashboardSummary,
+  getAllAdminRoutes,
+} = require('../controllers/dashboardController');
+const {
   getAllUsers,
+  createUser,
+  updateUser,
+  deleteUser,
   updateUserActiveStatus,
 } = require('../controllers/userAdminController');
 
 const router = express.Router();
 
 router.use(protect);
+
+router.get('/dashboard/summary', requireAdmin, getAdminDashboardSummary);
+router.get('/routes/all', requireAdmin, getAllAdminRoutes);
 
 router.get('/profile', (req, res) => {
   res.status(200).json({
@@ -37,11 +59,18 @@ router.get('/profile', (req, res) => {
   });
 });
 
-router.post('/routes', requireAdmin, createRoute);
-router.get('/routes', requireAdmin, getAllRoutes);
-router.get('/routes/:id', requireAdmin, getRouteById);
-router.put('/routes/:id', requireAdmin, updateRoute);
-router.delete('/routes/:id', requireAdmin, deleteRoute);
+router.post('/routes', createRoute);
+router.get('/routes', getAllRoutes);
+router.get('/routes/:id', getRouteById);
+router.put('/routes/:id', updateRoute);
+router.delete('/routes/:id', deleteRoute);
+
+router.post('/products', requireAdmin, createProduct);
+router.get('/products', requireAdmin, getAllProducts);
+router.get('/products/catalog', getBillProducts);
+router.get('/products/:id', requireAdmin, getProductById);
+router.put('/products/:id', requireAdmin, updateProduct);
+router.delete('/products/:id', requireAdmin, deleteProduct);
 
 router.get('/shops/routes', getShopRoutes);
 router.post('/shops', parseShopImageUpload, createShop);
@@ -50,7 +79,15 @@ router.put('/shops/:id', parseShopImageUpload, updateShop);
 router.delete('/shops/:id', deleteShop);
 router.get('/shops', requireAdmin, getAllShops);
 
+router.get('/bills/my-bills', getMyBills);
+router.post('/bills', createBill);
+
 router.get('/users', requireAdmin, getAllUsers);
+router.post('/users', requireAdmin, createUser);
+router.put('/users/:id', requireAdmin, updateUser);
+router.delete('/users/:id', requireAdmin, deleteUser);
 router.patch('/users/:id/status', requireAdmin, updateUserActiveStatus);
 
 module.exports = router;
+
+

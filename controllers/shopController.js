@@ -41,9 +41,9 @@ const canManageShop = (req, shop) => {
   return String(shop.userId) === String(req.user._id);
 };
 
-const getShopRoutes = async (_req, res) => {
+const getShopRoutes = async (req, res) => {
   try {
-    const routes = await Route.find({}).sort({ createdAt: -1 });
+    const routes = await Route.find({ userId: req.user._id }).sort({ createdAt: -1 });
     return res.status(200).json({
       success: true,
       message: 'Routes fetched successfully',
@@ -69,7 +69,7 @@ const createShop = async (req, res) => {
       });
     }
 
-    const route = await Route.findById(routeId);
+    const route = await Route.findOne({ _id: routeId, userId: req.user._id });
     if (!route) {
       return res.status(404).json({
         success: false,
@@ -113,7 +113,7 @@ const createShop = async (req, res) => {
     });
 
     const populated = await Shop.findById(created._id)
-      .populate('routeId', 'routeName')
+      .populate('routeId', 'routeName cityName')
       .populate('userId', 'name email roleId');
 
     return res.status(201).json({
@@ -163,7 +163,7 @@ const updateShop = async (req, res) => {
       });
     }
 
-    const route = await Route.findById(routeId);
+    const route = await Route.findOne({ _id: routeId, userId: req.user._id });
     if (!route) {
       return res.status(404).json({
         success: false,
@@ -208,7 +208,7 @@ const updateShop = async (req, res) => {
     await shop.save();
 
     const populated = await Shop.findById(shop._id)
-      .populate('routeId', 'routeName')
+      .populate('routeId', 'routeName cityName')
       .populate('userId', 'name email roleId');
 
     return res.status(200).json({
@@ -268,7 +268,7 @@ const deleteShop = async (req, res) => {
 const getMyShops = async (req, res) => {
   try {
     const shops = await Shop.find({ userId: req.user._id })
-      .populate('routeId', 'routeName')
+      .populate('routeId', 'routeName cityName')
       .populate('userId', 'name email roleId')
       .sort({ createdAt: -1 });
 
@@ -289,7 +289,7 @@ const getMyShops = async (req, res) => {
 const getAllShops = async (_req, res) => {
   try {
     const shops = await Shop.find({})
-      .populate('routeId', 'routeName')
+      .populate('routeId', 'routeName cityName')
       .populate('userId', 'name email roleId')
       .sort({ createdAt: -1 });
 
