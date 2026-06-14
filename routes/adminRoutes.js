@@ -25,8 +25,12 @@ const {
 } = require('../controllers/shopController');
 const {
   createBill,
+  deleteBill,
+  getAllAdminBills,
   getMyBills,
   getBillProducts,
+  markBillsAsShipped,
+  updateBill,
 } = require('../controllers/billController');
 const {
   getAdminDashboardSummary,
@@ -80,7 +84,11 @@ router.delete('/shops/:id', deleteShop);
 router.get('/shops', requireAdmin, getAllShops);
 
 router.get('/bills/my-bills', getMyBills);
+router.get('/bills/all', requireAdmin, getAllAdminBills);
+router.patch('/bills/ship', requireAdmin, markBillsAsShipped);
 router.post('/bills', createBill);
+router.put('/bills/:id', updateBill);
+router.delete('/bills/:id', deleteBill);
 
 router.get('/users', requireAdmin, getAllUsers);
 router.post('/users', requireAdmin, createUser);

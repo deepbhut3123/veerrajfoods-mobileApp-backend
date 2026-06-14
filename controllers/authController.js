@@ -2,9 +2,11 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const { sendVerificationCodeToAdmin } = require('../config/mail');
+const { sendPasswordResetOtpEmail } = require('../config/mail');
 
-const LOGIN_VERIFICATION_EXPIRES_MS = 10 * 60 * 1000;
+const AUTHENTICATOR_ISSUER = process.env.AUTHENTICATOR_ISSUER || 'VRJ Mobile App';
+const ADMIN_AUTHENTICATOR_SECRET = process.env.ADMIN_AUTHENTICATOR_SECRET || '';
+const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 const signToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
@@ -27,8 +29,88 @@ const sanitizeUser = (user) => ({
   updatedAt: user.updatedAt,
 });
 
-const generateVerificationCode = () =>
-  String(Math.floor(100000 + Math.random() * 900000));
+const toBase32 = (buffer) => {
+  let bits = 0;
+  let value = 0;
+  let output = '';
+
+  for (const byte of buffer) {
+    value = (value << 8) | byte;
+    bits += 8;
+
+    while (bits >= 5) {
+      output += BASE32_ALPHABET[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+
+  if (bits > 0) {
+    output += BASE32_ALPHABET[(value << (5 - bits)) & 31];
+  }
+
+  return output;
+};
+
+const fromBase32 = (input) => {
+  const normalized = String(input).toUpperCase().replace(/=+$/g, '');
+  let bits = 0;
+  let value = 0;
+  const output = [];
+
+  for (const char of normalized) {
+    const index = BASE32_ALPHABET.indexOf(char);
+    if (index === -1) {
+      throw new Error('Invalid base32 secret');
+    }
+
+    value = (value << 5) | index;
+    bits += 5;
+
+    if (bits >= 8) {
+      output.push((value >>> (bits - 8)) & 255);
+      bits -= 8;
+    }
+  }
+
+  return Buffer.from(output);
+};
+
+const generateTotpToken = (secret, counter) => {
+  const key = fromBase32(secret);
+  const buffer = Buffer.alloc(8);
+  const high = Math.floor(counter / 0x100000000);
+  const low = counter % 0x100000000;
+
+  buffer.writeUInt32BE(high, 0);
+  buffer.writeUInt32BE(low, 4);
+
+  const digest = crypto.createHmac('sha1', key).update(buffer).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const binary =
+    ((digest[offset] & 0x7f) << 24) |
+    ((digest[offset + 1] & 0xff) << 16) |
+    ((digest[offset + 2] & 0xff) << 8) |
+    (digest[offset + 3] & 0xff);
+
+  return String(binary % 1000000).padStart(6, '0');
+};
+
+const verifyTotpCode = (secret, token) => {
+  const sanitizedToken = String(token).trim();
+  if (!/^\d{6}$/.test(sanitizedToken)) {
+    return false;
+  }
+
+  const currentCounter = Math.floor(Date.now() / 30000);
+
+  for (let windowOffset = -1; windowOffset <= 1; windowOffset += 1) {
+    if (generateTotpToken(secret, currentCounter + windowOffset) === sanitizedToken) {
+      return true;
+    }
+  }
+
+  return false;
+};
 
 const register = async (req, res) => {
   try {
@@ -120,42 +202,21 @@ const login = async (req, res) => {
       });
     }
 
-    if (user.roleId === 1) {
-      const token = signToken(user._id);
-
-      return res.status(200).json({
-        success: true,
-        message: 'Login successful',
-        token,
-        user: sanitizeUser(user),
+    if (!ADMIN_AUTHENTICATOR_SECRET) {
+      return res.status(500).json({
+        success: false,
+        message: 'ADMIN_AUTHENTICATOR_SECRET is not configured on the server',
       });
     }
 
-    const verificationCode = generateVerificationCode();
-    const verificationCodeHash = crypto
-      .createHash('sha256')
-      .update(verificationCode)
-      .digest('hex');
-    const verificationExpiresAt = new Date(Date.now() + LOGIN_VERIFICATION_EXPIRES_MS);
-
-    user.loginVerificationCode = verificationCodeHash;
-    user.loginVerificationExpires = verificationExpiresAt;
-    await user.save();
-
-    const emailResult = await sendVerificationCodeToAdmin({
-      user,
-      code: verificationCode,
-    });
     const verificationToken = signVerificationToken(user._id);
 
     return res.status(202).json({
       success: true,
-      message: emailResult.delivered
-        ? 'Verification code sent to admin email'
-        : 'Verification code generated. Configure SMTP to send it by email.',
+      message: 'Enter the current Google Authenticator code from admin to finish login.',
       requiresVerification: true,
       verificationToken,
-      adminEmail: emailResult.adminEmail,
+      verificationMethod: 'authenticator',
       user: sanitizeUser(user),
     });
   } catch (error) {
@@ -195,9 +256,7 @@ const verifyLoginCode = async (req, res) => {
       });
     }
 
-    const user = await User.findById(decoded.id).select(
-      '+loginVerificationCode +loginVerificationExpires',
-    );
+    const user = await User.findById(decoded.id);
 
     if (!user) {
       return res.status(404).json({
@@ -213,42 +272,19 @@ const verifyLoginCode = async (req, res) => {
       });
     }
 
-    if (user.roleId === 1) {
-      return res.status(400).json({
+    if (!ADMIN_AUTHENTICATOR_SECRET) {
+      return res.status(500).json({
         success: false,
-        message: 'Admin login does not require verification code',
+        message: 'ADMIN_AUTHENTICATOR_SECRET is not configured on the server',
       });
     }
 
-    if (!user.loginVerificationCode || !user.loginVerificationExpires) {
-      return res.status(400).json({
-        success: false,
-        message: 'No verification code is pending for this account',
-      });
-    }
-
-    if (user.loginVerificationExpires.getTime() < Date.now()) {
-      user.loginVerificationCode = null;
-      user.loginVerificationExpires = null;
-      await user.save();
-
-      return res.status(400).json({
-        success: false,
-        message: 'Verification code expired. Please login again.',
-      });
-    }
-
-    const codeHash = crypto.createHash('sha256').update(String(code)).digest('hex');
-    if (codeHash !== user.loginVerificationCode) {
+    if (!verifyTotpCode(ADMIN_AUTHENTICATOR_SECRET, code)) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid verification code',
+        message: 'Invalid Google Authenticator code',
       });
     }
-
-    user.loginVerificationCode = null;
-    user.loginVerificationExpires = null;
-    await user.save();
 
     const token = signToken(user._id);
 
@@ -278,7 +314,9 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+resetPasswordToken +resetPasswordExpires');
+    const user = await User.findOne({ email: email.toLowerCase() }).select(
+      '+resetPasswordToken +resetPasswordExpires +resetPasswordOtp +resetPasswordOtpExpires',
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -287,23 +325,87 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
 
-    user.resetPasswordToken = resetTokenHash;
-    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+    user.resetPasswordOtp = otpHash;
+    user.resetPasswordOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
     await user.save();
+
+    await sendPasswordResetOtpEmail({
+      user,
+      otp,
+    });
 
     return res.status(200).json({
       success: true,
-      message: 'Password reset token generated',
-      resetToken,
-      note: 'Use this token in /api/auth/reset-password within 15 minutes',
+      message: 'Password reset OTP sent to your email',
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
       message: 'Failed to process forgot password request',
+      error: error.message,
+    });
+  }
+};
+
+const verifyResetOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and OTP are required',
+      });
+    }
+
+    const user = await User.findOne({ email: String(email).toLowerCase() }).select(
+      '+resetPasswordToken +resetPasswordExpires +resetPasswordOtp +resetPasswordOtpExpires',
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found with this email',
+      });
+    }
+
+    const otpHash = crypto.createHash('sha256').update(String(otp)).digest('hex');
+
+    if (
+      !user.resetPasswordOtp ||
+      !user.resetPasswordOtpExpires ||
+      user.resetPasswordOtp !== otpHash ||
+      user.resetPasswordOtpExpires <= new Date()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired OTP',
+      });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    user.resetPasswordToken = resetTokenHash;
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+    user.resetPasswordOtp = null;
+    user.resetPasswordOtpExpires = null;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully',
+      resetToken,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to verify reset OTP',
       error: error.message,
     });
   }
@@ -325,7 +427,7 @@ const resetPassword = async (req, res) => {
     const user = await User.findOne({
       resetPasswordToken: hashedToken,
       resetPasswordExpires: { $gt: new Date() },
-    }).select('+password +resetPasswordToken +resetPasswordExpires');
+    }).select('+password +resetPasswordToken +resetPasswordExpires +resetPasswordOtp +resetPasswordOtpExpires');
 
     if (!user) {
       return res.status(400).json({
@@ -337,6 +439,8 @@ const resetPassword = async (req, res) => {
     user.password = await bcrypt.hash(newPassword, 10);
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
+    user.resetPasswordOtp = null;
+    user.resetPasswordOtpExpires = null;
     await user.save();
 
     return res.status(200).json({
@@ -357,5 +461,6 @@ module.exports = {
   login,
   verifyLoginCode,
   forgotPassword,
+  verifyResetOtp,
   resetPassword,
 };
