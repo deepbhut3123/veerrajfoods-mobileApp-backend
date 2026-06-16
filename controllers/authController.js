@@ -29,6 +29,8 @@ const sanitizeUser = (user) => ({
   updatedAt: user.updatedAt,
 });
 
+const isAdminUser = (user) => Number(user?.roleId) === 1;
+
 const toBase32 = (buffer) => {
   let bits = 0;
   let value = 0;
@@ -202,21 +204,32 @@ const login = async (req, res) => {
       });
     }
 
-    if (!ADMIN_AUTHENTICATOR_SECRET) {
-      return res.status(500).json({
-        success: false,
-        message: 'ADMIN_AUTHENTICATOR_SECRET is not configured on the server',
+    if (!isAdminUser(user)) {
+      if (!ADMIN_AUTHENTICATOR_SECRET) {
+        return res.status(500).json({
+          success: false,
+          message: 'ADMIN_AUTHENTICATOR_SECRET is not configured on the server',
+        });
+      }
+
+      const verificationToken = signVerificationToken(user._id);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Enter the current Google Authenticator code to finish login.',
+        requiresVerification: true,
+        verificationToken,
+        verificationMethod: 'authenticator',
+        user: sanitizeUser(user),
       });
     }
 
-    const verificationToken = signVerificationToken(user._id);
+    const token = signToken(user._id);
 
-    return res.status(202).json({
+    return res.status(200).json({
       success: true,
-      message: 'Enter the current Google Authenticator code from admin to finish login.',
-      requiresVerification: true,
-      verificationToken,
-      verificationMethod: 'authenticator',
+      message: 'Login successful',
+      token,
       user: sanitizeUser(user),
     });
   } catch (error) {
@@ -269,6 +282,13 @@ const verifyLoginCode = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: 'Your account has been deactivated. Please contact admin.',
+      });
+    }
+
+    if (isAdminUser(user)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Authenticator verification is not required for admin login.',
       });
     }
 
