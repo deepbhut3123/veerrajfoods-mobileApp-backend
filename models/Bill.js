@@ -65,7 +65,7 @@ const billSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['ordered', 'processing', 'shipped', 'delivered', 'cancelled'],
+      enum: ['ordered', 'processing', 'completed', 'shipped', 'delivered', 'cancelled'],
       default: 'ordered',
       required: true,
     },

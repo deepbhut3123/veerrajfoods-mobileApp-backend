@@ -1,5 +1,21 @@
 const Route = require('../models/Route');
 
+const isAdmin = (req) => req?.user?.roleId === 1;
+
+const getRouteScope = (req, routeId) => {
+  const scope = {};
+
+  if (routeId) {
+    scope._id = routeId;
+  }
+
+  if (!isAdmin(req)) {
+    scope.userId = req.user._id;
+  }
+
+  return scope;
+};
+
 const createRoute = async (req, res) => {
   try {
     const { routeName, cityName } = req.body;
@@ -33,7 +49,7 @@ const createRoute = async (req, res) => {
 
 const getAllRoutes = async (req, res) => {
   try {
-    const routes = await Route.find({ userId: req.user._id }).sort({ createdAt: -1 });
+    const routes = await Route.find(getRouteScope(req)).sort({ createdAt: -1 });
     return res.status(200).json({
       success: true,
       message: 'Routes fetched successfully',
@@ -50,7 +66,7 @@ const getAllRoutes = async (req, res) => {
 
 const getRouteById = async (req, res) => {
   try {
-    const route = await Route.findOne({ _id: req.params.id, userId: req.user._id });
+    const route = await Route.findOne(getRouteScope(req, req.params.id));
 
     if (!route) {
       return res.status(404).json({
@@ -85,9 +101,9 @@ const updateRoute = async (req, res) => {
     }
 
     const updated = await Route.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user._id },
+      getRouteScope(req, req.params.id),
       { routeName: routeName.trim(), cityName: cityName.trim() },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!updated) {
@@ -113,7 +129,7 @@ const updateRoute = async (req, res) => {
 
 const deleteRoute = async (req, res) => {
   try {
-    const deleted = await Route.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    const deleted = await Route.findOneAndDelete(getRouteScope(req, req.params.id));
 
     if (!deleted) {
       return res.status(404).json({

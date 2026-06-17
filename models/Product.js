@@ -8,6 +8,12 @@ const productSchema = new mongoose.Schema(
       required: [true, 'userId is required'],
       index: true,
     },
+    sequence: {
+      type: Number,
+      default: 0,
+      index: true,
+      min: [0, 'sequence must be greater than or equal to 0'],
+    },
     productName: {
       type: String,
       required: [true, 'productName is required'],

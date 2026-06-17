@@ -1,5 +1,6 @@
 const Route = require('../models/Route');
 const Shop = require('../models/Shop');
+const User = require('../models/User');
 const { uploadBufferToCloudinary } = require('../middlewares/uploadMiddleware');
 
 const getValidationMessage = (error, fallback) => {
@@ -17,6 +18,8 @@ const getValidationMessage = (error, fallback) => {
 
   return fallback;
 };
+
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const normalizeCoordinate = (value, min, max) => {
   if (value === undefined || value === null || String(value).trim() === '') {
@@ -41,9 +44,23 @@ const canManageShop = (req, shop) => {
   return String(shop.userId) === String(req.user._id);
 };
 
+const getRouteScope = (req, routeId) => {
+  const scope = {};
+
+  if (routeId) {
+    scope._id = routeId;
+  }
+
+  if (req.user?.roleId !== 1) {
+    scope.userId = req.user._id;
+  }
+
+  return scope;
+};
+
 const getShopRoutes = async (req, res) => {
   try {
-    const routes = await Route.find({ userId: req.user._id }).sort({ createdAt: -1 });
+    const routes = await Route.find(getRouteScope(req)).sort({ createdAt: -1 });
     return res.status(200).json({
       success: true,
       message: 'Routes fetched successfully',
@@ -69,7 +86,7 @@ const createShop = async (req, res) => {
       });
     }
 
-    const route = await Route.findOne({ _id: routeId, userId: req.user._id });
+    const route = await Route.findOne(getRouteScope(req, routeId));
     if (!route) {
       return res.status(404).json({
         success: false,
@@ -163,7 +180,7 @@ const updateShop = async (req, res) => {
       });
     }
 
-    const route = await Route.findOne({ _id: routeId, userId: req.user._id });
+    const route = await Route.findOne(getRouteScope(req, routeId));
     if (!route) {
       return res.status(404).json({
         success: false,
@@ -202,6 +219,9 @@ const updateShop = async (req, res) => {
     if (hasLocation) {
       shop.latitude = parsedLatitude;
       shop.longitude = parsedLongitude;
+    } else {
+      shop.latitude = null;
+      shop.longitude = null;
     }
     shop.shopImage = nextImage;
 
@@ -286,9 +306,37 @@ const getMyShops = async (req, res) => {
   }
 };
 
-const getAllShops = async (_req, res) => {
+const getAllShops = async (req, res) => {
   try {
-    const shops = await Shop.find({})
+    const search = String(req.query.search || '').trim();
+    let filter = {};
+
+    if (search) {
+      const regex = new RegExp(escapeRegex(search), 'i');
+      const [matchingRoutes, matchingUsers] = await Promise.all([
+        Route.find({
+          $or: [{ routeName: regex }, { cityName: regex }],
+        }).select('_id'),
+        User.find({
+          $or: [{ name: regex }, { email: regex }],
+        }).select('_id'),
+      ]);
+
+      const routeIds = matchingRoutes.map((route) => route._id);
+      const userIds = matchingUsers.map((user) => user._id);
+
+      filter = {
+        $or: [
+          { shopName: regex },
+          { shopAddress: regex },
+          { mobileNumber: regex },
+          ...(routeIds.length ? [{ routeId: { $in: routeIds } }] : []),
+          ...(userIds.length ? [{ userId: { $in: userIds } }] : []),
+        ],
+      };
+    }
+
+    const shops = await Shop.find(filter)
       .populate('routeId', 'routeName cityName')
       .populate('userId', 'name email roleId')
       .sort({ createdAt: -1 });

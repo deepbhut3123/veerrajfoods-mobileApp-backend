@@ -4,6 +4,8 @@ const Product = require('../models/Product');
 const Bill = require('../models/Bill');
 const User = require('../models/User');
 
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const getAdminDashboardSummary = async (req, res) => {
   try {
     const now = new Date();
@@ -91,9 +93,28 @@ const getAdminDashboardSummary = async (req, res) => {
   }
 };
 
-const getAllAdminRoutes = async (_req, res) => {
+const getAllAdminRoutes = async (req, res) => {
   try {
-    const routes = await Route.find({})
+    const search = String(req.query.search || '').trim();
+    let filter = {};
+
+    if (search) {
+      const regex = new RegExp(escapeRegex(search), 'i');
+      const matchingUsers = await User.find({
+        $or: [{ name: regex }, { email: regex }],
+      }).select('_id');
+
+      const userIds = matchingUsers.map((user) => user._id);
+      filter = {
+        $or: [
+          { routeName: regex },
+          { cityName: regex },
+          ...(userIds.length ? [{ userId: { $in: userIds } }] : []),
+        ],
+      };
+    }
+
+    const routes = await Route.find(filter)
       .populate('userId', 'name email roleId')
       .sort({ createdAt: -1 });
 

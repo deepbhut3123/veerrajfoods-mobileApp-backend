@@ -24,6 +24,44 @@ const getValidationMessage = (error, fallback) => {
   return fallback;
 };
 
+const normalizeProductSequences = async () => {
+  const products = await Product.find({})
+    .sort({ sequence: 1, createdAt: 1, _id: 1 })
+    .select('_id sequence');
+
+  const operations = [];
+
+  products.forEach((product, index) => {
+    const nextSequence = index + 1;
+    if (product.sequence !== nextSequence) {
+      operations.push({
+        updateOne: {
+          filter: { _id: product._id },
+          update: { $set: { sequence: nextSequence } },
+        },
+      });
+    }
+  });
+
+  if (operations.length > 0) {
+    await Product.bulkWrite(operations);
+  }
+};
+
+const getProductsWithSequenceOrder = () =>
+  Product.find({})
+    .populate('userId', 'name email roleId')
+    .sort({ sequence: 1, createdAt: 1, _id: 1 });
+
+const getNextSequence = async () => {
+  const lastProduct = await Product.findOne({})
+    .sort({ sequence: -1, createdAt: -1, _id: -1 })
+    .select('sequence');
+
+  const currentSequence = Number(lastProduct?.sequence);
+  return Number.isFinite(currentSequence) && currentSequence > 0 ? currentSequence + 1 : 1;
+};
+
 const createProduct = async (req, res) => {
   try {
     const { productName, mrp, productRate } = req.body;
@@ -47,6 +85,7 @@ const createProduct = async (req, res) => {
 
     const created = await Product.create({
       userId: req.user._id,
+      sequence: await getNextSequence(),
       productName: String(productName).trim(),
       mrp: parsedMrp,
       productRate: parsedProductRate,
@@ -78,9 +117,8 @@ const createProduct = async (req, res) => {
 
 const getAllProducts = async (_req, res) => {
   try {
-    const products = await Product.find({})
-      .populate('userId', 'name email roleId')
-      .sort({ createdAt: -1 });
+    await normalizeProductSequences();
+    const products = await getProductsWithSequenceOrder();
 
     return res.status(200).json({
       success: true,
@@ -149,7 +187,7 @@ const updateProduct = async (req, res) => {
         mrp: parsedMrp,
         productRate: parsedProductRate,
       },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     ).populate('userId', 'name email roleId');
 
     if (!updated) {
@@ -181,6 +219,62 @@ const updateProduct = async (req, res) => {
   }
 };
 
+const reorderProducts = async (req, res) => {
+  try {
+    const { productIds } = req.body;
+
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'productIds must be a non-empty array',
+      });
+    }
+
+    const uniqueProductIds = [...new Set(productIds.map((id) => String(id)))];
+    const allProducts = await Product.find({}).select('_id');
+
+    if (uniqueProductIds.length !== allProducts.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please send sequence for all products',
+      });
+    }
+
+    const existingIds = new Set(allProducts.map((product) => String(product._id)));
+    const hasInvalidId = uniqueProductIds.some((id) => !existingIds.has(id));
+
+    if (hasInvalidId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid product ids provided for sequence update',
+      });
+    }
+
+    await Product.bulkWrite(
+      uniqueProductIds.map((productId, index) => ({
+        updateOne: {
+          filter: { _id: productId },
+          update: { $set: { sequence: index + 1 } },
+        },
+      }))
+    );
+
+    const products = await getProductsWithSequenceOrder();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Product sequence updated successfully',
+      data: products,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to reorder products',
+      error: error.message,
+    });
+  }
+};
+
 const deleteProduct = async (req, res) => {
   try {
     const deleted = await Product.findByIdAndDelete(req.params.id);
@@ -191,6 +285,8 @@ const deleteProduct = async (req, res) => {
         message: 'Product not found',
       });
     }
+
+    await normalizeProductSequences();
 
     return res.status(200).json({
       success: true,
@@ -211,5 +307,6 @@ module.exports = {
   getAllProducts,
   getProductById,
   updateProduct,
+  reorderProducts,
   deleteProduct,
 };

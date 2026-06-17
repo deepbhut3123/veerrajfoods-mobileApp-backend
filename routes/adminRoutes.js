@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const { protect, requireAdmin } = require('../middlewares/authMiddleware');
 const { parseShopImageUpload } = require('../middlewares/uploadMiddleware');
 const {
@@ -13,6 +13,7 @@ const {
   getAllProducts,
   getProductById,
   updateProduct,
+  reorderProducts,
   deleteProduct,
 } = require('../controllers/productController');
 const {
@@ -26,10 +27,12 @@ const {
 const {
   createBill,
   deleteBill,
+  bulkDeleteBills,
   getAllAdminBills,
   getMyBills,
   getBillProducts,
   markBillsAsShipped,
+  markBillsAsCompleted,
   updateBill,
 } = require('../controllers/billController');
 const {
@@ -74,6 +77,7 @@ router.get('/products', requireAdmin, getAllProducts);
 router.get('/products/catalog', getBillProducts);
 router.get('/products/:id', requireAdmin, getProductById);
 router.put('/products/:id', requireAdmin, updateProduct);
+router.patch('/products/reorder', requireAdmin, reorderProducts);
 router.delete('/products/:id', requireAdmin, deleteProduct);
 
 router.get('/shops/routes', getShopRoutes);
@@ -86,9 +90,11 @@ router.get('/shops', requireAdmin, getAllShops);
 router.get('/bills/my-bills', getMyBills);
 router.get('/bills/all', requireAdmin, getAllAdminBills);
 router.patch('/bills/ship', requireAdmin, markBillsAsShipped);
+router.patch('/bills/complete', requireAdmin, markBillsAsCompleted);
 router.post('/bills', createBill);
 router.put('/bills/:id', updateBill);
 router.delete('/bills/:id', deleteBill);
+router.delete('/bills', bulkDeleteBills);
 
 router.get('/users', requireAdmin, getAllUsers);
 router.post('/users', requireAdmin, createUser);
@@ -97,5 +103,4 @@ router.delete('/users/:id', requireAdmin, deleteUser);
 router.patch('/users/:id/status', requireAdmin, updateUserActiveStatus);
 
 module.exports = router;
-
 

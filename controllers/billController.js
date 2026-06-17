@@ -3,7 +3,57 @@ const Product = require('../models/Product');
 const Route = require('../models/Route');
 const Shop = require('../models/Shop');
 
-const buildBillPayload = async ({ routeId, shopId, items, userId }) => {
+const isAdmin = (req) => req?.user?.roleId === 1;
+
+const getUserScope = (req) => (isAdmin(req) ? {} : { userId: req.user._id });
+
+const buildBillSearchValue = (bill) => {
+  const itemValues = Array.isArray(bill?.items)
+    ? bill.items.flatMap((item) => [
+        item?.productName,
+        item?.quantity,
+        item?.productRate,
+        item?.total,
+        typeof item?.productId === 'object' ? item?.productId?.productName : '',
+        typeof item?.productId === 'object' ? item?.productId?.mrp : '',
+      ])
+    : [];
+
+  return [
+    bill?._id,
+    bill?.billNo,
+    bill?.invoiceNo,
+    bill?.billNumber,
+    bill?.customerName,
+    bill?.partyName,
+    bill?.shopName,
+    bill?.status,
+    bill?.amount,
+    bill?.billAmount,
+    bill?.totalAmount,
+    bill?.grandTotal,
+    bill?.netAmount,
+    bill?.createdAt,
+    bill?.updatedAt,
+    bill?.routeId?._id,
+    bill?.routeId?.routeName,
+    bill?.routeId?.cityName,
+    bill?.shopId?._id,
+    bill?.shopId?.shopName,
+    bill?.shopId?.shopAddress,
+    bill?.shopId?.mobileNumber,
+    bill?.customerId?.name,
+    bill?.userId?._id,
+    bill?.userId?.name,
+    bill?.userId?.email,
+    ...itemValues,
+  ]
+    .filter((value) => value !== undefined && value !== null && String(value).trim() !== '')
+    .join(' ')
+    .toLowerCase();
+};
+
+const buildBillPayload = async ({ routeId, shopId, items, req }) => {
   if (!routeId || !shopId) {
     return {
       error: {
@@ -22,7 +72,9 @@ const buildBillPayload = async ({ routeId, shopId, items, userId }) => {
     };
   }
 
-  const route = await Route.findOne({ _id: routeId, userId });
+  const scope = getUserScope(req);
+
+  const route = await Route.findOne({ _id: routeId, ...scope });
   if (!route) {
     return {
       error: {
@@ -32,7 +84,7 @@ const buildBillPayload = async ({ routeId, shopId, items, userId }) => {
     };
   }
 
-  const shop = await Shop.findOne({ _id: shopId, routeId, userId });
+  const shop = await Shop.findOne({ _id: shopId, routeId, ...scope });
   if (!shop) {
     return {
       error: {
@@ -105,7 +157,7 @@ const createBill = async (req, res) => {
       routeId,
       shopId,
       items,
-      userId: req.user._id,
+      req,
     });
 
     if (prepared.error) {
@@ -122,9 +174,10 @@ const createBill = async (req, res) => {
     });
 
     const populated = await Bill.findById(created._id)
+      .populate('userId', 'name email roleId')
+      .populate('items.productId', 'mrp productName')
       .populate('routeId', 'routeName cityName')
-      .populate('shopId', 'shopName shopAddress mobileNumber')
-      .sort({ createdAt: -1 });
+      .populate('shopId', 'shopName shopAddress mobileNumber');
 
     return res.status(201).json({
       success: true,
@@ -161,8 +214,10 @@ const getMyBills = async (req, res) => {
   }
 };
 
-const getAllAdminBills = async (_req, res) => {
+const getAllAdminBills = async (req, res) => {
   try {
+    const search = String(req.query?.search || '').trim().toLowerCase();
+
     const bills = await Bill.find({})
       .populate('userId', 'name email roleId')
       .populate('items.productId', 'mrp productName')
@@ -170,10 +225,14 @@ const getAllAdminBills = async (_req, res) => {
       .populate('shopId', 'shopName shopAddress mobileNumber')
       .sort({ createdAt: -1 });
 
+    const filteredBills = search
+      ? bills.filter((bill) => buildBillSearchValue(bill).includes(search))
+      : bills;
+
     return res.status(200).json({
       success: true,
       message: 'All bills fetched successfully',
-      data: bills,
+      data: filteredBills,
     });
   } catch (error) {
     return res.status(500).json({
@@ -239,6 +298,61 @@ const markBillsAsShipped = async (req, res) => {
   }
 };
 
+const markBillsAsCompleted = async (req, res) => {
+  try {
+    const billIds = Array.isArray(req.body?.billIds)
+      ? req.body.billIds.map((id) => String(id)).filter(Boolean)
+      : [];
+
+    if (billIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'billIds is required',
+      });
+    }
+
+    const existingBills = await Bill.find({ _id: { $in: billIds } }).select('_id status');
+
+    if (existingBills.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No bills found for the selected ids',
+      });
+    }
+
+    const updatableBillIds = existingBills
+      .filter((bill) => !['cancelled', 'completed'].includes(String(bill.status || '').toLowerCase()))
+      .map((bill) => bill._id);
+
+    if (updatableBillIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Selected bills are already completed or cancelled',
+      });
+    }
+
+    await Bill.updateMany(
+      { _id: { $in: updatableBillIds } },
+      { $set: { status: 'completed' } }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Selected bills marked as completed',
+      data: {
+        updatedCount: updatableBillIds.length,
+        skippedCount: existingBills.length - updatableBillIds.length,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update bill status',
+      error: error.message,
+    });
+  }
+};
+
 const getBillProducts = async (_req, res) => {
   try {
     const products = await Product.find({})
@@ -262,7 +376,7 @@ const getBillProducts = async (_req, res) => {
 const updateBill = async (req, res) => {
   try {
     const { routeId, shopId, items } = req.body;
-    const existingBill = await Bill.findOne({ _id: req.params.id, userId: req.user._id });
+    const existingBill = await Bill.findOne({ _id: req.params.id, ...getUserScope(req) });
 
     if (!existingBill) {
       return res.status(404).json({
@@ -271,7 +385,7 @@ const updateBill = async (req, res) => {
       });
     }
 
-    if (existingBill.status !== 'ordered') {
+    if (!isAdmin(req) && existingBill.status !== 'ordered') {
       return res.status(400).json({
         success: false,
         message: 'Only ordered bills can be updated',
@@ -282,7 +396,7 @@ const updateBill = async (req, res) => {
       routeId,
       shopId,
       items,
-      userId: req.user._id,
+      req,
     });
 
     if (prepared.error) {
@@ -300,6 +414,8 @@ const updateBill = async (req, res) => {
     await existingBill.save();
 
     const populated = await Bill.findById(existingBill._id)
+      .populate('userId', 'name email roleId')
+      .populate('items.productId', 'mrp productName')
       .populate('routeId', 'routeName cityName')
       .populate('shopId', 'shopName shopAddress mobileNumber');
 
@@ -319,7 +435,7 @@ const updateBill = async (req, res) => {
 
 const deleteBill = async (req, res) => {
   try {
-    const existingBill = await Bill.findOne({ _id: req.params.id, userId: req.user._id });
+    const existingBill = await Bill.findOne({ _id: req.params.id, ...getUserScope(req) });
 
     if (!existingBill) {
       return res.status(404).json({
@@ -328,7 +444,7 @@ const deleteBill = async (req, res) => {
       });
     }
 
-    if (existingBill.status !== 'ordered') {
+    if (!isAdmin(req) && existingBill.status !== 'ordered') {
       return res.status(400).json({
         success: false,
         message: 'Only ordered bills can be deleted',
@@ -350,12 +466,71 @@ const deleteBill = async (req, res) => {
   }
 };
 
+const bulkDeleteBills = async (req, res) => {
+  try {
+    const billIds = Array.isArray(req.body?.billIds)
+      ? req.body.billIds.map((id) => String(id)).filter(Boolean)
+      : [];
+
+    if (billIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'billIds is required',
+      });
+    }
+
+    const scope = getUserScope(req);
+    const bills = await Bill.find({ _id: { $in: billIds }, ...scope }).select('_id status');
+
+    if (bills.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No bills found for the selected ids',
+      });
+    }
+
+    const deletableBills = isAdmin(req)
+      ? bills
+      : bills.filter((bill) => bill.status === 'ordered');
+
+    if (deletableBills.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only ordered bills can be deleted',
+      });
+    }
+
+    const deletableIds = deletableBills.map((bill) => bill._id);
+    await Bill.deleteMany({ _id: { $in: deletableIds } });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Selected bills deleted successfully',
+      data: {
+        deletedCount: deletableIds.length,
+        skippedCount: bills.length - deletableIds.length,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete selected bills',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createBill,
   updateBill,
   deleteBill,
+  bulkDeleteBills,
   getMyBills,
   getAllAdminBills,
   markBillsAsShipped,
+  markBillsAsCompleted,
   getBillProducts,
 };
+
+
+
