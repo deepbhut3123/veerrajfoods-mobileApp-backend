@@ -126,10 +126,10 @@ const register = async (req, res) => {
     }
 
     const parsedRoleId = Number(roleId ?? roleid ?? 2);
-    if (![1, 2].includes(parsedRoleId)) {
+    if (![1, 2, 3].includes(parsedRoleId)) {
       return res.status(400).json({
         success: false,
-        message: 'roleId must be 1 (admin) or 2 (other)',
+        message: 'roleId must be 1 (admin), 2 (retailer) or 3 (dealer)',
       });
     }
 
@@ -484,3 +484,4 @@ module.exports = {
   verifyResetOtp,
   resetPassword,
 };
+

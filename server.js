@@ -9,6 +9,8 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const publicRoutes = require('./routes/publicRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const retailerRoutes = require('./routes/retailerRoutes');
+const dealerRoutes = require('./routes/dealerRoutes');
 
 const app = express();
 
@@ -21,6 +23,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api', publicRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/retailer', retailerRoutes);
+app.use('/api/admin/dealer', dealerRoutes);
 
 app.use((error, _req, res, _next) => {
   console.error('Unhandled server error:', error);

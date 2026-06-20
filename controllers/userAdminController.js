@@ -43,10 +43,10 @@ const createUser = async (req, res) => {
     }
 
     const parsedRoleId = Number(roleId ?? 2);
-    if (![1, 2].includes(parsedRoleId)) {
+    if (![1, 2, 3].includes(parsedRoleId)) {
       return res.status(400).json({
         success: false,
-        message: 'roleId must be 1 or 2',
+        message: 'roleId must be 1, 2 or 3',
       });
     }
 
@@ -146,10 +146,10 @@ const updateUser = async (req, res) => {
 
     if (roleId !== undefined) {
       const parsedRoleId = Number(roleId);
-      if (![1, 2].includes(parsedRoleId)) {
+      if (![1, 2, 3].includes(parsedRoleId)) {
         return res.status(400).json({
           success: false,
-          message: 'roleId must be 1 or 2',
+          message: 'roleId must be 1, 2 or 3',
         });
       }
       targetUser.roleId = parsedRoleId;
@@ -264,3 +264,4 @@ module.exports = {
   deleteUser,
   updateUserActiveStatus,
 };
+
