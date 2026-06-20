@@ -136,7 +136,9 @@ const buildDealerBillPayload = async ({ dealerId, billDate, kattaCount, items })
     const rate = item.productRate;
     const mrp = linkedProduct ? Number(linkedProduct.mrp) : item.mrp;
     const productName = linkedProduct ? linkedProduct.productName : item.productName;
-    const amount = calculateAmountFromMargin(rate, dealer.margin);
+    const amount = linkedProduct
+      ? calculateAmountFromMargin(rate, dealer.margin)
+      : rate;
 
     return {
       productId: linkedProduct?._id || null,
