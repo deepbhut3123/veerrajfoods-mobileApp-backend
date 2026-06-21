@@ -1,6 +1,7 @@
 const Route = require('../models/Route');
 const Shop = require('../models/Shop');
 const Product = require('../models/Product');
+const Dealer = require('../models/Dealer');
 const Bill = require('../models/Bill');
 const User = require('../models/User');
 
@@ -30,11 +31,12 @@ const getAdminDashboardSummary = async (req, res) => {
       },
     };
 
-    const [routesCount, shopsCount, productsCount, shippedBillsCount, shippedByUser, users, billYears] =
+    const [routesCount, shopsCount, productsCount, dealersCount, shippedBillsCount, shippedByUser, users, billYears] =
       await Promise.all([
         Route.countDocuments({}),
         Shop.countDocuments({}),
         Product.countDocuments({}),
+        Dealer.countDocuments({}),
         Bill.countDocuments(shippedMatch),
         Bill.aggregate([
           { $match: shippedMatch },
@@ -77,6 +79,7 @@ const getAdminDashboardSummary = async (req, res) => {
         routesCount,
         shopsCount,
         productsCount,
+        dealersCount,
         shippedBillsCount,
         selectedMonth: month,
         selectedYear: year,
@@ -136,3 +139,4 @@ module.exports = {
   getAdminDashboardSummary,
   getAllAdminRoutes,
 };
+
