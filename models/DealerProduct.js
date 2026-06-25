@@ -24,6 +24,12 @@ const dealerProductSchema = new mongoose.Schema(
       required: [true, 'productRate is required'],
       min: [0, 'productRate must be greater than or equal to 0'],
     },
+    sequence: {
+      type: Number,
+      required: true,
+      default: 0,
+      min: [0, 'sequence must be greater than or equal to 0'],
+    },
   },
   {
     timestamps: true,

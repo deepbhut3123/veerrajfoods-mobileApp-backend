@@ -204,7 +204,48 @@ const createDealerBill = async (req, res) => {
 const getAllDealerBills = async (req, res) => {
   try {
     const search = String(req.query?.search || '').trim().toLowerCase();
-    const bills = await populateDealerBill(DealerBill.find({}).sort({ billDate: -1, createdAt: -1 }));
+    const dealerId = String(req.query?.dealerId || '').trim();
+    const fromDate = String(req.query?.fromDate || '').trim();
+    const toDate = String(req.query?.toDate || '').trim();
+    const query = {};
+
+    if (dealerId) {
+      query.dealerId = dealerId;
+    }
+
+    if (fromDate || toDate) {
+      query.billDate = {};
+
+      if (fromDate) {
+        const parsedFromDate = new Date(fromDate);
+        if (Number.isNaN(parsedFromDate.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: 'fromDate must be a valid date',
+          });
+        }
+
+        parsedFromDate.setHours(0, 0, 0, 0);
+        query.billDate.$gte = parsedFromDate;
+      }
+
+      if (toDate) {
+        const parsedToDate = new Date(toDate);
+        if (Number.isNaN(parsedToDate.getTime())) {
+          return res.status(400).json({
+            success: false,
+            message: 'toDate must be a valid date',
+          });
+        }
+
+        parsedToDate.setHours(23, 59, 59, 999);
+        query.billDate.$lte = parsedToDate;
+      }
+    }
+
+    const bills = await populateDealerBill(
+      DealerBill.find(query).sort({ billDate: -1, createdAt: -1 }),
+    );
 
     const filteredBills = search
       ? bills.filter((bill) => buildBillSearchValue(bill).includes(search))

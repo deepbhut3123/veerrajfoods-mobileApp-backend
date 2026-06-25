@@ -1,4 +1,6 @@
 const Dealer = require('../models/Dealer');
+const DealerBill = require('../models/DealerBill');
+const DealerPayment = require('../models/DealerPayment');
 
 const normalizeNumber = (value) => {
   if (value === undefined || value === null || String(value).trim() === '') {
@@ -31,6 +33,7 @@ const buildDealerSearchValue = (dealer) =>
     dealer?.contactNo,
     dealer?.city,
     dealer?.margin,
+    dealer?.pendingPayment,
     dealer?.userId?.name,
     dealer?.userId?.email,
   ]
@@ -97,9 +100,58 @@ const getAllDealers = async (req, res) => {
       .populate('userId', 'name email roleId')
       .sort({ createdAt: -1 });
 
+    const dealerIds = dealers.map((dealer) => dealer._id);
+    const [billTotals, paymentTotals] = await Promise.all([
+      DealerBill.aggregate([
+        {
+          $match: {
+            dealerId: { $in: dealerIds },
+          },
+        },
+        {
+          $group: {
+            _id: '$dealerId',
+            totalBillAmount: { $sum: '$totalAmount' },
+          },
+        },
+      ]),
+      DealerPayment.aggregate([
+        {
+          $match: {
+            dealerId: { $in: dealerIds },
+          },
+        },
+        {
+          $group: {
+            _id: '$dealerId',
+            totalPaymentAmount: { $sum: '$amount' },
+          },
+        },
+      ]),
+    ]);
+
+    const billTotalByDealerId = new Map(
+      billTotals.map((item) => [String(item._id), Number(item.totalBillAmount || 0)]),
+    );
+    const paymentTotalByDealerId = new Map(
+      paymentTotals.map((item) => [String(item._id), Number(item.totalPaymentAmount || 0)]),
+    );
+
+    const dealersWithPendingPayment = dealers.map((dealer) => {
+      const totalBillAmount = billTotalByDealerId.get(String(dealer._id)) || 0;
+      const totalPaymentAmount = paymentTotalByDealerId.get(String(dealer._id)) || 0;
+
+      return {
+        ...dealer.toObject(),
+        pendingPayment: totalBillAmount - totalPaymentAmount,
+      };
+    });
+
     const filteredDealers = search
-      ? dealers.filter((dealer) => buildDealerSearchValue(dealer).includes(search))
-      : dealers;
+      ? dealersWithPendingPayment.filter((dealer) =>
+          buildDealerSearchValue(dealer).includes(search),
+        )
+      : dealersWithPendingPayment;
 
     return res.status(200).json({
       success: true,

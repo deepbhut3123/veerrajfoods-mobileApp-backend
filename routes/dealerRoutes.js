@@ -10,6 +10,7 @@ const {
   createDealerProduct,
   getAllDealerProducts,
   updateDealerProduct,
+  reorderDealerProducts,
   deleteDealerProduct,
 } = require('../controllers/dealerProductController');
 const {
@@ -18,6 +19,12 @@ const {
   updateDealerBill,
   deleteDealerBill,
 } = require('../controllers/dealerBillController');
+const {
+  createDealerPayment,
+  getAllDealerPayments,
+  updateDealerPayment,
+  deleteDealerPayment,
+} = require('../controllers/dealerPaymentController');
 
 const router = express.Router();
 
@@ -31,6 +38,7 @@ router.delete('/dealers/:id', deleteDealer);
 
 router.get('/products', getAllDealerProducts);
 router.post('/products', createDealerProduct);
+router.patch('/products/reorder', reorderDealerProducts);
 router.put('/products/:id', updateDealerProduct);
 router.delete('/products/:id', deleteDealerProduct);
 
@@ -38,5 +46,10 @@ router.get('/bills', getAllDealerBills);
 router.post('/bills', createDealerBill);
 router.put('/bills/:id', updateDealerBill);
 router.delete('/bills/:id', deleteDealerBill);
+
+router.get('/payments', getAllDealerPayments);
+router.post('/payments', createDealerPayment);
+router.put('/payments/:id', updateDealerPayment);
+router.delete('/payments/:id', deleteDealerPayment);
 
 module.exports = router;

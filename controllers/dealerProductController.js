@@ -24,6 +24,44 @@ const getValidationMessage = (error, fallback) => {
   return fallback;
 };
 
+const normalizeDealerProductSequences = async () => {
+  const products = await DealerProduct.find({})
+    .sort({ sequence: 1, createdAt: 1, _id: 1 })
+    .select('_id sequence');
+
+  const operations = [];
+
+  products.forEach((product, index) => {
+    const nextSequence = index + 1;
+    if (product.sequence !== nextSequence) {
+      operations.push({
+        updateOne: {
+          filter: { _id: product._id },
+          update: { $set: { sequence: nextSequence } },
+        },
+      });
+    }
+  });
+
+  if (operations.length > 0) {
+    await DealerProduct.bulkWrite(operations);
+  }
+};
+
+const getDealerProductsWithSequenceOrder = () =>
+  DealerProduct.find({})
+    .populate('userId', 'name email roleId')
+    .sort({ sequence: 1, createdAt: 1, _id: 1 });
+
+const getNextSequence = async () => {
+  const lastProduct = await DealerProduct.findOne({})
+    .sort({ sequence: -1, createdAt: -1, _id: -1 })
+    .select('sequence');
+
+  const currentSequence = Number(lastProduct?.sequence);
+  return Number.isFinite(currentSequence) && currentSequence > 0 ? currentSequence + 1 : 1;
+};
+
 const buildProductSearchValue = (product) =>
   [
     product?._id,
@@ -62,6 +100,7 @@ const createDealerProduct = async (req, res) => {
       mrp: parsedMrp,
       productName: String(productName).trim(),
       productRate: parsedRate,
+      sequence: await getNextSequence(),
     });
 
     const populated = await DealerProduct.findById(created._id).populate('userId', 'name email roleId');
@@ -91,9 +130,8 @@ const createDealerProduct = async (req, res) => {
 const getAllDealerProducts = async (req, res) => {
   try {
     const search = String(req.query?.search || '').trim().toLowerCase();
-    const products = await DealerProduct.find({})
-      .populate('userId', 'name email roleId')
-      .sort({ createdAt: -1 });
+    await normalizeDealerProductSequences();
+    const products = await getDealerProductsWithSequenceOrder();
 
     const filteredProducts = search
       ? products.filter((product) => buildProductSearchValue(product).includes(search))
@@ -172,6 +210,62 @@ const updateDealerProduct = async (req, res) => {
   }
 };
 
+const reorderDealerProducts = async (req, res) => {
+  try {
+    const { productIds } = req.body;
+
+    if (!Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'productIds must be a non-empty array',
+      });
+    }
+
+    const uniqueProductIds = [...new Set(productIds.map((id) => String(id)))];
+    const allProducts = await DealerProduct.find({}).select('_id');
+
+    if (uniqueProductIds.length !== allProducts.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please send sequence for all dealer products',
+      });
+    }
+
+    const existingIds = new Set(allProducts.map((product) => String(product._id)));
+    const hasInvalidId = uniqueProductIds.some((id) => !existingIds.has(id));
+
+    if (hasInvalidId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid dealer product ids provided for sequence update',
+      });
+    }
+
+    await DealerProduct.bulkWrite(
+      uniqueProductIds.map((productId, index) => ({
+        updateOne: {
+          filter: { _id: productId },
+          update: { $set: { sequence: index + 1 } },
+        },
+      }))
+    );
+
+    const products = await getDealerProductsWithSequenceOrder();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Dealer product sequence updated successfully',
+      data: products,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to reorder dealer products',
+      error: error.message,
+    });
+  }
+};
+
 const deleteDealerProduct = async (req, res) => {
   try {
     const deleted = await DealerProduct.findByIdAndDelete(req.params.id);
@@ -182,6 +276,8 @@ const deleteDealerProduct = async (req, res) => {
         message: 'Dealer product not found',
       });
     }
+
+    await normalizeDealerProductSequences();
 
     return res.status(200).json({
       success: true,
@@ -201,5 +297,6 @@ module.exports = {
   createDealerProduct,
   getAllDealerProducts,
   updateDealerProduct,
+  reorderDealerProducts,
   deleteDealerProduct,
 };

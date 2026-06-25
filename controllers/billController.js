@@ -357,7 +357,7 @@ const getBillProducts = async (_req, res) => {
   try {
     const products = await Product.find({})
       .populate('userId', 'name email roleId')
-      .sort({ productName: 1 });
+      .sort({ sequence: 1, createdAt: 1, _id: 1 });
 
     return res.status(200).json({
       success: true,
@@ -372,7 +372,6 @@ const getBillProducts = async (_req, res) => {
     });
   }
 };
-
 const updateBill = async (req, res) => {
   try {
     const { routeId, shopId, items } = req.body;
@@ -527,10 +526,14 @@ module.exports = {
   bulkDeleteBills,
   getMyBills,
   getAllAdminBills,
+  getBillProducts,
   markBillsAsShipped,
   markBillsAsCompleted,
-  getBillProducts,
 };
+
+
+
+
 
 
 
