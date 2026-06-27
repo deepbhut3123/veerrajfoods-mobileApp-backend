@@ -24,7 +24,6 @@ const userSchema = new mongoose.Schema(
     },
     roleId: {
       type: Number,
-      enum: [1, 2, 3],
       default: 2,
       required: true,
     },
@@ -81,4 +80,6 @@ const userSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model('Users', userSchema);
+
+
 

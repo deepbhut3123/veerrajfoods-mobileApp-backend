@@ -126,12 +126,6 @@ const register = async (req, res) => {
     }
 
     const parsedRoleId = Number(roleId ?? roleid ?? 2);
-    if (![1, 2, 3].includes(parsedRoleId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'roleId must be 1 (admin), 2 (retailer) or 3 (dealer)',
-      });
-    }
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {
@@ -484,4 +478,6 @@ module.exports = {
   verifyResetOtp,
   resetPassword,
 };
+
+
 
