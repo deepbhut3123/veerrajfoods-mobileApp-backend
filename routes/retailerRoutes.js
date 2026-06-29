@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect, requireAdmin } = require('../middlewares/authMiddleware');
+const { protect, requireAdmin, requireAnyRole } = require('../middlewares/authMiddleware');
 const { parseShopImageUpload } = require('../middlewares/uploadMiddleware');
 const {
   createRoute,
@@ -66,15 +66,16 @@ router.delete('/shops/:id', deleteShop);
 router.get('/shops', requireAdmin, getAllShops);
 
 router.get('/bills/my-bills', getMyBills);
-router.get('/bills/all', requireAdmin, getAllAdminBills);
+router.get('/bills/all', requireAnyRole(1, 6), getAllAdminBills);
 router.patch('/bills/ship', requireAdmin, markBillsAsShipped);
-router.patch('/bills/complete', requireAdmin, markBillsAsCompleted);
+router.patch('/bills/complete', requireAnyRole(1, 6), markBillsAsCompleted);
 router.post('/bills', createBill);
 router.put('/bills/:id', updateBill);
 router.delete('/bills/:id', deleteBill);
 router.delete('/bills', bulkDeleteBills);
 
 module.exports = router;
+
 
 
 

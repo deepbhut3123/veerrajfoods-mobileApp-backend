@@ -63,6 +63,11 @@ const billSchema = new mongoose.Schema(
       required: [true, 'totalAmount is required'],
       min: [0, 'totalAmount must be greater than or equal to 0'],
     },
+    deliveryManId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Users',
+      default: null,
+    },
     status: {
       type: String,
       enum: ['ordered', 'processing', 'completed', 'shipped', 'delivered', 'cancelled'],

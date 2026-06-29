@@ -1,5 +1,5 @@
 const express = require('express');
-const { protect, requireAdmin } = require('../middlewares/authMiddleware');
+const { protect, requireAdmin, requireAnyRole } = require('../middlewares/authMiddleware');
 const {
   createDealer,
   getAllDealers,
@@ -27,29 +27,29 @@ const {
 } = require('../controllers/dealerPaymentController');
 
 const router = express.Router();
+const allowAdminOrRoleFive = requireAnyRole(1, 5);
 
 router.use(protect);
-router.use(requireAdmin);
 
-router.get('/dealers', getAllDealers);
-router.post('/dealers', createDealer);
-router.put('/dealers/:id', updateDealer);
-router.delete('/dealers/:id', deleteDealer);
+router.get('/dealers', allowAdminOrRoleFive, getAllDealers);
+router.post('/dealers', requireAdmin, createDealer);
+router.put('/dealers/:id', requireAdmin, updateDealer);
+router.delete('/dealers/:id', requireAdmin, deleteDealer);
 
-router.get('/products', getAllDealerProducts);
-router.post('/products', createDealerProduct);
-router.patch('/products/reorder', reorderDealerProducts);
-router.put('/products/:id', updateDealerProduct);
-router.delete('/products/:id', deleteDealerProduct);
+router.get('/products', allowAdminOrRoleFive, getAllDealerProducts);
+router.post('/products', requireAdmin, createDealerProduct);
+router.patch('/products/reorder', requireAdmin, reorderDealerProducts);
+router.put('/products/:id', requireAdmin, updateDealerProduct);
+router.delete('/products/:id', requireAdmin, deleteDealerProduct);
 
-router.get('/bills', getAllDealerBills);
-router.post('/bills', createDealerBill);
-router.put('/bills/:id', updateDealerBill);
-router.delete('/bills/:id', deleteDealerBill);
+router.get('/bills', allowAdminOrRoleFive, getAllDealerBills);
+router.post('/bills', allowAdminOrRoleFive, createDealerBill);
+router.put('/bills/:id', requireAdmin, updateDealerBill);
+router.delete('/bills/:id', requireAdmin, deleteDealerBill);
 
-router.get('/payments', getAllDealerPayments);
-router.post('/payments', createDealerPayment);
-router.put('/payments/:id', updateDealerPayment);
-router.delete('/payments/:id', deleteDealerPayment);
+router.get('/payments', requireAdmin, getAllDealerPayments);
+router.post('/payments', requireAdmin, createDealerPayment);
+router.put('/payments/:id', requireAdmin, updateDealerPayment);
+router.delete('/payments/:id', requireAdmin, deleteDealerPayment);
 
 module.exports = router;

@@ -53,4 +53,17 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { protect, requireAdmin };
+const requireAnyRole = (...allowedRoles) => (req, res, next) => {
+  const roleId = Number(req.user?.roleId);
+
+  if (!req.user || !allowedRoles.includes(roleId)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied',
+    });
+  }
+
+  next();
+};
+
+module.exports = { protect, requireAdmin, requireAnyRole };

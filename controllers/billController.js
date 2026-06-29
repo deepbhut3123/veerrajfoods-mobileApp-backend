@@ -2,6 +2,7 @@ const Bill = require('../models/Bill');
 const Product = require('../models/Product');
 const Route = require('../models/Route');
 const Shop = require('../models/Shop');
+const User = require('../models/User');
 
 const isAdmin = (req) => req?.user?.roleId === 1;
 
@@ -46,6 +47,9 @@ const buildBillSearchValue = (bill) => {
     bill?.userId?._id,
     bill?.userId?.name,
     bill?.userId?.email,
+    bill?.deliveryManId?._id,
+    bill?.deliveryManId?.name,
+    bill?.deliveryManId?.email,
     ...itemValues,
   ]
     .filter((value) => value !== undefined && value !== null && String(value).trim() !== '')
@@ -175,6 +179,7 @@ const createBill = async (req, res) => {
 
     const populated = await Bill.findById(created._id)
       .populate('userId', 'name email roleId')
+      .populate('deliveryManId', 'name email roleId isActive')
       .populate('items.productId', 'mrp productName')
       .populate('routeId', 'routeName cityName')
       .populate('shopId', 'shopName shopAddress mobileNumber');
@@ -198,6 +203,7 @@ const getMyBills = async (req, res) => {
     const bills = await Bill.find({ userId: req.user._id })
       .populate('routeId', 'routeName cityName')
       .populate('shopId', 'shopName shopAddress mobileNumber')
+      .populate('deliveryManId', 'name email roleId isActive')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -217,9 +223,13 @@ const getMyBills = async (req, res) => {
 const getAllAdminBills = async (req, res) => {
   try {
     const search = String(req.query?.search || '').trim().toLowerCase();
+    const query = Number(req.user?.roleId) === 6
+      ? { deliveryManId: req.user._id }
+      : {};
 
-    const bills = await Bill.find({})
+    const bills = await Bill.find(query)
       .populate('userId', 'name email roleId')
+      .populate('deliveryManId', 'name email roleId isActive')
       .populate('items.productId', 'mrp productName')
       .populate('routeId', 'routeName cityName')
       .populate('shopId', 'shopName shopAddress mobileNumber')
@@ -248,6 +258,7 @@ const markBillsAsShipped = async (req, res) => {
     const billIds = Array.isArray(req.body?.billIds)
       ? req.body.billIds.map((id) => String(id)).filter(Boolean)
       : [];
+    const deliveryManId = String(req.body?.deliveryManId || '').trim();
 
     if (billIds.length === 0) {
       return res.status(400).json({
@@ -256,7 +267,31 @@ const markBillsAsShipped = async (req, res) => {
       });
     }
 
-    const existingBills = await Bill.find({ _id: { $in: billIds } }).select('_id status');
+    if (!deliveryManId) {
+      return res.status(400).json({
+        success: false,
+        message: 'deliveryManId is required',
+      });
+    }
+
+    const deliveryMan = await User.findOne({
+      _id: deliveryManId,
+      roleId: 6,
+      isActive: true,
+    }).select('_id name email roleId isActive');
+
+    if (!deliveryMan) {
+      return res.status(404).json({
+        success: false,
+        message: 'Active delivery man not found',
+      });
+    }
+
+    const scope = Number(req.user?.roleId) === 6
+      ? { deliveryManId: req.user._id }
+      : {};
+
+    const existingBills = await Bill.find({ _id: { $in: billIds }, ...scope }).select('_id status');
 
     if (existingBills.length === 0) {
       return res.status(404).json({
@@ -266,27 +301,33 @@ const markBillsAsShipped = async (req, res) => {
     }
 
     const updatableBillIds = existingBills
-      .filter((bill) => bill.status !== 'cancelled')
+      .filter((bill) => !['cancelled', 'completed'].includes(String(bill.status || '').toLowerCase()))
       .map((bill) => bill._id);
 
     if (updatableBillIds.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Cancelled bills cannot be marked as shipped',
+        message: 'Completed or cancelled bills cannot be marked as shipped',
       });
     }
 
     await Bill.updateMany(
       { _id: { $in: updatableBillIds } },
-      { $set: { status: 'shipped' } }
+      {
+        $set: {
+          status: 'shipped',
+          deliveryManId: deliveryMan._id,
+        },
+      }
     );
 
     return res.status(200).json({
       success: true,
-      message: 'Selected bills marked as shipped',
+      message: 'Selected bills assigned and marked as shipped',
       data: {
         updatedCount: updatableBillIds.length,
         skippedCount: existingBills.length - updatableBillIds.length,
+        deliveryMan,
       },
     });
   } catch (error) {
@@ -311,7 +352,11 @@ const markBillsAsCompleted = async (req, res) => {
       });
     }
 
-    const existingBills = await Bill.find({ _id: { $in: billIds } }).select('_id status');
+    const scope = Number(req.user?.roleId) === 6
+      ? { deliveryManId: req.user._id }
+      : {};
+
+    const existingBills = await Bill.find({ _id: { $in: billIds }, ...scope }).select('_id status');
 
     if (existingBills.length === 0) {
       return res.status(404).json({
@@ -414,6 +459,7 @@ const updateBill = async (req, res) => {
 
     const populated = await Bill.findById(existingBill._id)
       .populate('userId', 'name email roleId')
+      .populate('deliveryManId', 'name email roleId isActive')
       .populate('items.productId', 'mrp productName')
       .populate('routeId', 'routeName cityName')
       .populate('shopId', 'shopName shopAddress mobileNumber');
@@ -530,6 +576,9 @@ module.exports = {
   markBillsAsShipped,
   markBillsAsCompleted,
 };
+
+
+
 
 
 
