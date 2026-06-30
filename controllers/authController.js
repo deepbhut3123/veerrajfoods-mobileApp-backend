@@ -470,6 +470,21 @@ const resetPassword = async (req, res) => {
   }
 };
 
+const logout = async (_req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      message: 'Logout successful',
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to logout',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -477,7 +492,7 @@ module.exports = {
   forgotPassword,
   verifyResetOtp,
   resetPassword,
+  logout,
 };
-
 
 

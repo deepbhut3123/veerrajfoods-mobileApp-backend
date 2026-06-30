@@ -10,12 +10,14 @@ const {
   deleteUser,
   updateUserActiveStatus,
 } = require('../controllers/userAdminController');
+const { getAdminAttendance } = require('../controllers/attendanceController');
 
 const router = express.Router();
 
 router.use(protect);
 
 router.get('/dashboard/summary', requireAdmin, getAdminDashboardSummary);
+router.get('/attendance', requireAdmin, getAdminAttendance);
 router.get('/profile', (req, res) => {
   res.status(200).json({
     success: true,
