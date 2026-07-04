@@ -70,6 +70,56 @@ const formatTimeOnly = (value) => {
   }).format(date);
 };
 
+const parseAttendanceTime = (dateValue, timeValue) => {
+  const normalizedDate = String(dateValue || '').trim();
+  const normalizedTime = String(timeValue || '').trim().toUpperCase();
+
+  if (!normalizedDate || !normalizedTime) {
+    return null;
+  }
+
+  const match = normalizedTime.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/);
+  if (!match) {
+    return null;
+  }
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const meridiem = match[3];
+
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 1 ||
+    hours > 12 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  if (meridiem === 'AM' && hours === 12) {
+    hours = 0;
+  } else if (meridiem === 'PM' && hours !== 12) {
+    hours += 12;
+  }
+
+  const parsed = new Date(`${normalizedDate}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  parsed.setHours(hours, minutes, 0, 0);
+  return parsed;
+};
+
+const formatAttendanceResponse = (item) => ({
+  ...item,
+  inTime: formatTimeOnly(item.inTime),
+  outTime: formatTimeOnly(item.outTime),
+  ipAddress: normalizeIpAddress(item.ipAddress),
+});
+
 const markAttendanceCheckIn = async (userId, req) => {
   if (!userId) {
     return null;
@@ -352,6 +402,140 @@ const getAdminAttendance = async (req, res) => {
   }
 };
 
+const updateAdminAttendance = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, date, inTime, outTime, ipAddress } = req.body || {};
+
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid attendance id',
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(String(userId))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid staff user is required',
+      });
+    }
+
+    const normalizedDate = String(date || '').trim();
+    const normalizedIpAddress = String(ipAddress || '').trim();
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Date must be in YYYY-MM-DD format',
+      });
+    }
+
+    if (!normalizedIpAddress) {
+      return res.status(400).json({
+        success: false,
+        message: 'IP address is required',
+      });
+    }
+
+    const parsedInTime = parseAttendanceTime(normalizedDate, inTime);
+    if (!parsedInTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'In time must be in hh:mm AM/PM format',
+      });
+    }
+
+    const parsedOutTime = outTime ? parseAttendanceTime(normalizedDate, outTime) : null;
+    if (outTime && !parsedOutTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Out time must be in hh:mm AM/PM format',
+      });
+    }
+
+    if (parsedOutTime && parsedOutTime < parsedInTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Out time must be after in time',
+      });
+    }
+
+    const existingAttendance = await Attendance.findById(id);
+    if (!existingAttendance) {
+      return res.status(404).json({
+        success: false,
+        message: 'Attendance record not found',
+      });
+    }
+
+    const staffUser = await mongoose.model('Users').findOne({
+      _id: userId,
+      roleId: STAFF_ROLE_ID,
+    });
+
+    if (!staffUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'Staff user not found',
+      });
+    }
+
+    const updatedAttendance = await Attendance.findByIdAndUpdate(
+      existingAttendance._id,
+      {
+        $set: {
+          userId,
+          date: normalizedDate,
+          inTime: parsedInTime,
+          outTime: parsedOutTime,
+          ipAddress: normalizedIpAddress,
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    ).populate('userId', 'name email roleId');
+
+    if (!updatedAttendance) {
+      return res.status(404).json({
+        success: false,
+        message: 'Attendance record not found',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Attendance updated successfully',
+      data: formatAttendanceResponse({
+        ...updatedAttendance.toObject(),
+        user: updatedAttendance.userId
+          ? {
+              _id: updatedAttendance.userId._id,
+              name: updatedAttendance.userId.name,
+              email: updatedAttendance.userId.email,
+              roleId: updatedAttendance.userId.roleId,
+            }
+          : null,
+      }),
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Another attendance record already exists for this staff user on the selected date',
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update attendance',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getAdminAttendance,
   getMyAttendance,
@@ -359,5 +543,6 @@ module.exports = {
   markAttendanceCheckOut,
   markMyAttendanceCheckIn,
   markMyAttendanceCheckOut,
+  updateAdminAttendance,
 };
 
