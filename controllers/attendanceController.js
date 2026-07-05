@@ -113,10 +113,21 @@ const parseAttendanceTime = (dateValue, timeValue) => {
   return parsed;
 };
 
+const parseCoordinate = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const formatAttendanceResponse = (item) => ({
   ...item,
   inTime: formatTimeOnly(item.inTime),
   outTime: formatTimeOnly(item.outTime),
+  breakIn: formatTimeOnly(item.breakIn),
+  breakOut: formatTimeOnly(item.breakOut),
   ipAddress: normalizeIpAddress(item.ipAddress),
 });
 
@@ -127,6 +138,8 @@ const markAttendanceCheckIn = async (userId, req) => {
 
   const date = getAttendanceDate();
   const ipAddress = getClientIp(req);
+  const latitude = parseCoordinate(req.body?.latitude);
+  const longitude = parseCoordinate(req.body?.longitude);
 
   return Attendance.findOneAndUpdate(
     { userId, date },
@@ -138,6 +151,8 @@ const markAttendanceCheckIn = async (userId, req) => {
       },
       $set: {
         ipAddress,
+        latitude,
+        longitude,
       },
     },
     {
@@ -155,6 +170,8 @@ const markAttendanceCheckOut = async (userId, req) => {
 
   const date = getAttendanceDate();
   const ipAddress = getClientIp(req);
+  const latitude = parseCoordinate(req.body?.latitude);
+  const longitude = parseCoordinate(req.body?.longitude);
 
   return Attendance.findOneAndUpdate(
     { userId, date },
@@ -162,6 +179,74 @@ const markAttendanceCheckOut = async (userId, req) => {
       $set: {
         outTime: new Date(),
         ipAddress,
+        latitude,
+        longitude,
+      },
+      $setOnInsert: {
+        userId,
+        date,
+        inTime: new Date(),
+      },
+    },
+    {
+      new: true,
+      upsert: true,
+      runValidators: true,
+    }
+  );
+};
+
+const markAttendanceBreakIn = async (userId, req) => {
+  if (!userId) {
+    return null;
+  }
+
+  const date = getAttendanceDate();
+  const ipAddress = getClientIp(req);
+  const latitude = parseCoordinate(req.body?.latitude);
+  const longitude = parseCoordinate(req.body?.longitude);
+
+  return Attendance.findOneAndUpdate(
+    { userId, date },
+    {
+      $set: {
+        breakIn: new Date(),
+        ipAddress,
+        latitude,
+        longitude,
+      },
+      $setOnInsert: {
+        userId,
+        date,
+        inTime: new Date(),
+      },
+    },
+    {
+      new: true,
+      upsert: true,
+      runValidators: true,
+    }
+  );
+};
+
+const markAttendanceBreakOut = async (userId, req) => {
+  if (!userId) {
+    return null;
+  }
+
+  const date = getAttendanceDate();
+  const ipAddress = getClientIp(req);
+  const latitude = parseCoordinate(req.body?.latitude);
+  const longitude = parseCoordinate(req.body?.longitude);
+
+  return Attendance.findOneAndUpdate(
+    { userId, date },
+    {
+      $set: {
+        breakOut: new Date(),
+        ipAddress,
+        latitude,
+        longitude,
       },
       $setOnInsert: {
         userId,
@@ -194,6 +279,8 @@ const getMyAttendance = async (req, res) => {
       ...item,
       inTime: formatTimeOnly(item.inTime),
       outTime: formatTimeOnly(item.outTime),
+      breakIn: formatTimeOnly(item.breakIn),
+      breakOut: formatTimeOnly(item.breakOut),
       ipAddress: normalizeIpAddress(item.ipAddress),
     }));
 
@@ -239,6 +326,8 @@ const markMyAttendanceCheckIn = async (req, res) => {
         ...attendance.toObject(),
         inTime: formatTimeOnly(attendance.inTime),
         outTime: formatTimeOnly(attendance.outTime),
+        breakIn: formatTimeOnly(attendance.breakIn),
+        breakOut: formatTimeOnly(attendance.breakOut),
         ipAddress: normalizeIpAddress(attendance.ipAddress),
       },
     });
@@ -286,6 +375,8 @@ const markMyAttendanceCheckOut = async (req, res) => {
         ...attendance.toObject(),
         inTime: formatTimeOnly(attendance.inTime),
         outTime: formatTimeOnly(attendance.outTime),
+        breakIn: formatTimeOnly(attendance.breakIn),
+        breakOut: formatTimeOnly(attendance.breakOut),
         ipAddress: normalizeIpAddress(attendance.ipAddress),
       },
     });
@@ -293,6 +384,125 @@ const markMyAttendanceCheckOut = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to mark check-out',
+      error: error.message,
+    });
+  }
+};
+
+const markMyAttendanceBreakIn = async (req, res) => {
+  try {
+    if (Number(req.user?.roleId) !== STAFF_ROLE_ID) {
+      return res.status(403).json({
+        success: false,
+        message: 'Staff access required',
+      });
+    }
+
+    const date = getAttendanceDate();
+    const existingAttendance = await Attendance.findOne({ userId: req.user._id, date });
+
+    if (!existingAttendance?.inTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please mark check-in first',
+      });
+    }
+
+    if (existingAttendance.outTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Today\'s check-out already exists',
+      });
+    }
+
+    if (existingAttendance.breakIn) {
+      return res.status(400).json({
+        success: false,
+        message: 'Today\'s break-in already exists',
+      });
+    }
+
+    const attendance = await markAttendanceBreakIn(req.user._id, req);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Break-in marked successfully',
+      data: {
+        ...attendance.toObject(),
+        inTime: formatTimeOnly(attendance.inTime),
+        outTime: formatTimeOnly(attendance.outTime),
+        breakIn: formatTimeOnly(attendance.breakIn),
+        breakOut: formatTimeOnly(attendance.breakOut),
+        ipAddress: normalizeIpAddress(attendance.ipAddress),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to mark break-in',
+      error: error.message,
+    });
+  }
+};
+
+const markMyAttendanceBreakOut = async (req, res) => {
+  try {
+    if (Number(req.user?.roleId) !== STAFF_ROLE_ID) {
+      return res.status(403).json({
+        success: false,
+        message: 'Staff access required',
+      });
+    }
+
+    const date = getAttendanceDate();
+    const existingAttendance = await Attendance.findOne({ userId: req.user._id, date });
+
+    if (!existingAttendance?.inTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please mark check-in first',
+      });
+    }
+
+    if (!existingAttendance?.breakIn) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please mark break-in first',
+      });
+    }
+
+    if (existingAttendance.outTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Today\'s check-out already exists',
+      });
+    }
+
+    if (existingAttendance.breakOut) {
+      return res.status(400).json({
+        success: false,
+        message: 'Today\'s break-out already exists',
+      });
+    }
+
+    const attendance = await markAttendanceBreakOut(req.user._id, req);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Break-out marked successfully',
+      data: {
+        ...attendance.toObject(),
+        inTime: formatTimeOnly(attendance.inTime),
+        outTime: formatTimeOnly(attendance.outTime),
+        breakIn: formatTimeOnly(attendance.breakIn),
+        breakOut: formatTimeOnly(attendance.breakOut),
+        ipAddress: normalizeIpAddress(attendance.ipAddress),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to mark break-out',
       error: error.message,
     });
   }
@@ -361,6 +571,10 @@ const getAdminAttendance = async (req, res) => {
           date: 1,
           inTime: 1,
           outTime: 1,
+          breakIn: 1,
+          breakOut: 1,
+          latitude: 1,
+          longitude: 1,
           ipAddress: 1,
           createdAt: 1,
           updatedAt: 1,
@@ -385,6 +599,8 @@ const getAdminAttendance = async (req, res) => {
       ...item,
       inTime: formatTimeOnly(item.inTime),
       outTime: formatTimeOnly(item.outTime),
+      breakIn: formatTimeOnly(item.breakIn),
+      breakOut: formatTimeOnly(item.breakOut),
       ipAddress: normalizeIpAddress(item.ipAddress),
     }));
 
@@ -405,7 +621,7 @@ const getAdminAttendance = async (req, res) => {
 const updateAdminAttendance = async (req, res) => {
   try {
     const { id } = req.params;
-    const { userId, date, inTime, outTime, ipAddress } = req.body || {};
+    const { userId, date, inTime, outTime, breakIn, breakOut, latitude, longitude, ipAddress } = req.body || {};
 
     if (!mongoose.Types.ObjectId.isValid(String(id))) {
       return res.status(400).json({
@@ -461,6 +677,60 @@ const updateAdminAttendance = async (req, res) => {
       });
     }
 
+    const parsedBreakIn = breakIn ? parseAttendanceTime(normalizedDate, breakIn) : null;
+    if (breakIn && !parsedBreakIn) {
+      return res.status(400).json({
+        success: false,
+        message: 'Break in must be in hh:mm AM/PM format',
+      });
+    }
+
+    const parsedBreakOut = breakOut ? parseAttendanceTime(normalizedDate, breakOut) : null;
+    if (breakOut && !parsedBreakOut) {
+      return res.status(400).json({
+        success: false,
+        message: 'Break out must be in hh:mm AM/PM format',
+      });
+    }
+
+    if (parsedBreakIn && parsedBreakIn < parsedInTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Break in must be after in time',
+      });
+    }
+
+    if (parsedBreakOut && !parsedBreakIn) {
+      return res.status(400).json({
+        success: false,
+        message: 'Break in is required when break out is provided',
+      });
+    }
+
+    if (parsedBreakIn && parsedOutTime && parsedBreakIn > parsedOutTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Break in must be before out time',
+      });
+    }
+
+    if (parsedBreakIn && parsedBreakOut && parsedBreakOut < parsedBreakIn) {
+      return res.status(400).json({
+        success: false,
+        message: 'Break out must be after break in',
+      });
+    }
+
+    if (parsedBreakOut && parsedOutTime && parsedBreakOut > parsedOutTime) {
+      return res.status(400).json({
+        success: false,
+        message: 'Break out must be before out time',
+      });
+    }
+
+    const parsedLatitude = parseCoordinate(latitude);
+    const parsedLongitude = parseCoordinate(longitude);
+
     const existingAttendance = await Attendance.findById(id);
     if (!existingAttendance) {
       return res.status(404).json({
@@ -489,6 +759,10 @@ const updateAdminAttendance = async (req, res) => {
           date: normalizedDate,
           inTime: parsedInTime,
           outTime: parsedOutTime,
+          breakIn: parsedBreakIn,
+          breakOut: parsedBreakOut,
+          latitude: parsedLatitude,
+          longitude: parsedLongitude,
           ipAddress: normalizedIpAddress,
         },
       },
@@ -541,8 +815,12 @@ module.exports = {
   getMyAttendance,
   markAttendanceCheckIn,
   markAttendanceCheckOut,
+  markAttendanceBreakIn,
+  markAttendanceBreakOut,
   markMyAttendanceCheckIn,
   markMyAttendanceCheckOut,
+  markMyAttendanceBreakIn,
+  markMyAttendanceBreakOut,
   updateAdminAttendance,
 };
 

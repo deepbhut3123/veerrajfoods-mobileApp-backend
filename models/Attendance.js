@@ -22,6 +22,22 @@ const attendanceSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    breakIn: {
+      type: Date,
+      default: null,
+    },
+    breakOut: {
+      type: Date,
+      default: null,
+    },
+    latitude: {
+      type: Number,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      default: null,
+    },
     ipAddress: {
       type: String,
       required: [true, 'IP address is required'],

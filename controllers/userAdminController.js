@@ -6,15 +6,27 @@ const sanitizeUser = (user) => ({
   name: user.name,
   email: user.email,
   roleId: user.roleId,
+  salary: user.salary ?? null,
   isActive: user.isActive,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
 });
 
+const STAFF_ROLE_ID = 5;
+
+const normalizeSalary = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : NaN;
+};
+
 const getAllUsers = async (_req, res) => {
   try {
     const users = await User.find({})
-      .select('name email roleId isActive createdAt updatedAt')
+      .select('name email roleId salary isActive createdAt updatedAt')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -33,7 +45,7 @@ const getAllUsers = async (_req, res) => {
 
 const createUser = async (req, res) => {
   try {
-    const { name, email, password, roleId, isActive } = req.body;
+    const { name, email, password, roleId, salary, isActive } = req.body;
 
     if (!name || !String(name).trim() || !email || !String(email).trim() || !password) {
       return res.status(400).json({
@@ -43,11 +55,26 @@ const createUser = async (req, res) => {
     }
 
     const parsedRoleId = Number(roleId ?? 2);
+    const parsedSalary = normalizeSalary(salary);
 
     if (isActive !== undefined && typeof isActive !== 'boolean') {
       return res.status(400).json({
         success: false,
         message: 'isActive must be true or false',
+      });
+    }
+
+    if (salary !== undefined && Number.isNaN(parsedSalary)) {
+      return res.status(400).json({
+        success: false,
+        message: 'salary must be a valid number',
+      });
+    }
+
+    if (parsedRoleId === STAFF_ROLE_ID && (parsedSalary === null || parsedSalary < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'salary is required for staff users',
       });
     }
 
@@ -66,6 +93,7 @@ const createUser = async (req, res) => {
       email: String(email).toLowerCase().trim(),
       password: hashedPassword,
       roleId: parsedRoleId,
+      salary: parsedRoleId === STAFF_ROLE_ID ? parsedSalary : null,
       isActive: typeof isActive === 'boolean' ? isActive : true,
     });
 
@@ -85,7 +113,7 @@ const createUser = async (req, res) => {
 
 const updateUser = async (req, res) => {
   try {
-    const { name, email, password, roleId, isActive } = req.body;
+    const { name, email, password, roleId, salary, isActive } = req.body;
     const targetUser = await User.findById(req.params.id);
 
     if (!targetUser) {
@@ -141,6 +169,30 @@ const updateUser = async (req, res) => {
     if (roleId !== undefined) {
       const parsedRoleId = Number(roleId);
       targetUser.roleId = parsedRoleId;
+    }
+
+    const nextRoleId = roleId !== undefined ? Number(roleId) : Number(targetUser.roleId);
+
+    if (salary !== undefined) {
+      const parsedSalary = normalizeSalary(salary);
+
+      if (Number.isNaN(parsedSalary)) {
+        return res.status(400).json({
+          success: false,
+          message: 'salary must be a valid number',
+        });
+      }
+
+      targetUser.salary = nextRoleId === STAFF_ROLE_ID ? parsedSalary : null;
+    } else if (nextRoleId !== STAFF_ROLE_ID) {
+      targetUser.salary = null;
+    }
+
+    if (nextRoleId === STAFF_ROLE_ID && (targetUser.salary === null || targetUser.salary < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'salary is required for staff users',
+      });
     }
 
     if (typeof isActive === 'boolean') {
@@ -231,6 +283,7 @@ const updateUserActiveStatus = async (req, res) => {
         name: targetUser.name,
         email: targetUser.email,
         roleId: targetUser.roleId,
+        salary: targetUser.salary ?? null,
         isActive: targetUser.isActive,
         createdAt: targetUser.createdAt,
         updatedAt: targetUser.updatedAt,

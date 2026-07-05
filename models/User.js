@@ -27,6 +27,11 @@ const userSchema = new mongoose.Schema(
       default: 2,
       required: true,
     },
+    salary: {
+      type: Number,
+      default: null,
+      min: [0, 'Salary cannot be negative'],
+    },
     isActive: {
       type: Boolean,
       default: true,

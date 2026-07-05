@@ -1,4 +1,6 @@
 const Product = require('../models/Product');
+const StockEntry = require('../models/StockEntry');
+const DealerBill = require('../models/DealerBill');
 
 const normalizeNumber = (value) => {
   if (value === undefined || value === null || String(value).trim() === '') {
@@ -22,6 +24,91 @@ const getValidationMessage = (error, fallback) => {
   }
 
   return fallback;
+};
+
+const normalizeProductName = (value) =>
+  String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+
+const syncCurrentStockValues = async () => {
+  const products = await Product.find({}).select('_id productName mrp currentStock');
+  const stockEntries = await StockEntry.find({}).select('items');
+  const dealerBills = await DealerBill.find({}).select('items');
+  const stockByProductId = new Map();
+  const productNameMap = new Map();
+
+  products.forEach((product) => {
+    stockByProductId.set(String(product._id), 0);
+
+    const normalizedName = normalizeProductName(product.productName);
+    if (!normalizedName) {
+      return;
+    }
+
+    const currentProducts = productNameMap.get(normalizedName) || [];
+    currentProducts.push(product);
+    productNameMap.set(normalizedName, currentProducts);
+  });
+
+  stockEntries.forEach((entry) => {
+    (entry.items || []).forEach((item) => {
+      const productId = item?.productId ? String(item.productId) : '';
+      const quantity = Math.trunc(Number(item?.quantity || 0));
+
+      if (!productId || !Number.isFinite(quantity)) {
+        return;
+      }
+
+      stockByProductId.set(productId, Number(stockByProductId.get(productId) || 0) + quantity);
+    });
+  });
+
+  dealerBills.forEach((bill) => {
+    (bill.items || []).forEach((item) => {
+      let stockProductId = item?.stockProductId ? String(item.stockProductId) : '';
+
+      if (!stockProductId) {
+        const normalizedName = normalizeProductName(item?.productName);
+        const candidates = productNameMap.get(normalizedName) || [];
+
+        if (candidates.length === 1) {
+          stockProductId = String(candidates[0]._id);
+        } else if (candidates.length > 1) {
+          const exactMatch = candidates.find((product) => Number(product.mrp || 0) === Number(item?.mrp || 0));
+          if (exactMatch) {
+            stockProductId = String(exactMatch._id);
+          }
+        }
+      }
+
+      const quantity = Math.trunc(Number(item?.quantity || 0));
+      if (!stockProductId || !Number.isFinite(quantity)) {
+        return;
+      }
+
+      stockByProductId.set(stockProductId, Number(stockByProductId.get(stockProductId) || 0) - quantity);
+    });
+  });
+
+  const operations = products
+    .map((product) => {
+      const nextCurrentStock = Math.max(0, Math.trunc(Number(stockByProductId.get(String(product._id)) || 0)));
+      return Number(product.currentStock || 0) !== nextCurrentStock
+        ? {
+            updateOne: {
+              filter: { _id: product._id },
+              update: { $set: { currentStock: nextCurrentStock } },
+            },
+          }
+        : null;
+    })
+    .filter(Boolean);
+
+  if (operations.length) {
+    await Product.bulkWrite(operations);
+  }
 };
 
 const normalizeProductSequences = async () => {
@@ -89,6 +176,7 @@ const createProduct = async (req, res) => {
       productName: String(productName).trim(),
       mrp: parsedMrp,
       productRate: parsedProductRate,
+      currentStock: 0,
     });
 
     const populated = await Product.findById(created._id).populate('userId', 'name email roleId');
@@ -118,6 +206,7 @@ const createProduct = async (req, res) => {
 const getAllProducts = async (_req, res) => {
   try {
     await normalizeProductSequences();
+    await syncCurrentStockValues();
     const products = await getProductsWithSequenceOrder();
 
     return res.status(200).json({

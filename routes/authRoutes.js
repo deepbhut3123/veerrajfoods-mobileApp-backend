@@ -13,6 +13,8 @@ const {
   getMyAttendance,
   markMyAttendanceCheckIn,
   markMyAttendanceCheckOut,
+  markMyAttendanceBreakIn,
+  markMyAttendanceBreakOut,
 } = require('../controllers/attendanceController');
 
 const router = express.Router();
@@ -26,6 +28,8 @@ router.post('/reset-password', resetPassword);
 router.get('/attendance', protect, getMyAttendance);
 router.post('/attendance/check-in', protect, markMyAttendanceCheckIn);
 router.post('/attendance/check-out', protect, markMyAttendanceCheckOut);
+router.post('/attendance/break-in', protect, markMyAttendanceBreakIn);
+router.post('/attendance/break-out', protect, markMyAttendanceBreakOut);
 router.post('/logout', protect, logout);
 
 module.exports = router;

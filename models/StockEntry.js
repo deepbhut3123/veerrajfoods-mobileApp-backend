@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const billItemSchema = new mongoose.Schema(
+const stockEntryItemSchema = new mongoose.Schema(
   {
     productId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -12,6 +12,11 @@ const billItemSchema = new mongoose.Schema(
       required: [true, 'productName is required'],
       trim: true,
     },
+    mrp: {
+      type: Number,
+      required: [true, 'mrp is required'],
+      min: [0, 'mrp must be greater than or equal to 0'],
+    },
     productRate: {
       type: Number,
       required: [true, 'productRate is required'],
@@ -20,7 +25,7 @@ const billItemSchema = new mongoose.Schema(
     quantity: {
       type: Number,
       required: [true, 'quantity is required'],
-      min: [1, 'quantity must be at least 1'],
+      min: [0, 'quantity must be greater than or equal to 0'],
     },
     total: {
       type: Number,
@@ -33,7 +38,7 @@ const billItemSchema = new mongoose.Schema(
   }
 );
 
-const billSchema = new mongoose.Schema(
+const stockEntrySchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -41,42 +46,24 @@ const billSchema = new mongoose.Schema(
       required: [true, 'userId is required'],
       index: true,
     },
-    routeId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Route',
-      required: [true, 'routeId is required'],
-    },
-    shopId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Shop',
-      required: [true, 'shopId is required'],
+    entryDate: {
+      type: String,
+      required: [true, 'entryDate is required'],
+      trim: true,
+      index: true,
     },
     items: {
-      type: [billItemSchema],
+      type: [stockEntryItemSchema],
       validate: {
         validator: (value) => Array.isArray(value) && value.length > 0,
-        message: 'At least one bill item is required',
+        message: 'At least one stock item is required',
       },
+      default: [],
     },
     totalAmount: {
       type: Number,
       required: [true, 'totalAmount is required'],
       min: [0, 'totalAmount must be greater than or equal to 0'],
-    },
-    deliveryManId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Users',
-      default: null,
-    },
-    status: {
-      type: String,
-      enum: ['ordered', 'processing', 'completed', 'shipped', 'delivered', 'cancelled'],
-      default: 'ordered',
-      required: true,
-    },
-    stockDeductedAt: {
-      type: Date,
-      default: null,
     },
   },
   {
@@ -85,4 +72,4 @@ const billSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model('Bill', billSchema);
+module.exports = mongoose.model('StockEntry', stockEntrySchema);

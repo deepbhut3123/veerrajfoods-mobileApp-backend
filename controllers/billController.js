@@ -8,6 +8,106 @@ const isAdmin = (req) => req?.user?.roleId === 1;
 
 const getUserScope = (req) => (isAdmin(req) ? {} : { userId: req.user._id });
 
+const addQuantityToMap = (quantityMap, productId, quantityDelta) => {
+  if (!productId) {
+    return;
+  }
+
+  const currentValue = Number(quantityMap.get(productId) || 0);
+  quantityMap.set(productId, currentValue + Number(quantityDelta || 0));
+};
+
+const buildQuantityMapFromBillItems = (items = [], multiplier = 1) => {
+  const quantityMap = new Map();
+
+  items.forEach((item) => {
+    const productId = item?.productId
+      ? typeof item.productId === 'object'
+        ? String(item.productId?._id || '')
+        : String(item.productId)
+      : '';
+    const quantity = Math.trunc(Number(item?.quantity || 0));
+
+    if (!productId || !Number.isFinite(quantity) || quantity <= 0) {
+      return;
+    }
+
+    addQuantityToMap(quantityMap, productId, quantity * multiplier);
+  });
+
+  return quantityMap;
+};
+
+const mergeQuantityMaps = (...maps) => {
+  const merged = new Map();
+
+  maps.forEach((map) => {
+    map.forEach((value, key) => addQuantityToMap(merged, key, value));
+  });
+
+  return merged;
+};
+
+const applyProductStockAdjustments = async (quantityMap) => {
+  const productIds = Array.from(quantityMap.keys()).filter(Boolean);
+
+  if (!productIds.length) {
+    return { error: null };
+  }
+
+  const products = await Product.find({ _id: { $in: productIds } }).select('_id productName currentStock');
+
+  if (products.length !== productIds.length) {
+    return {
+      error: {
+        status: 400,
+        message: 'One or more selected products were not found',
+      },
+    };
+  }
+
+  const insufficientProducts = products
+    .map((product) => {
+      const delta = Number(quantityMap.get(String(product._id)) || 0);
+      const nextStock = Number(product.currentStock || 0) + delta;
+
+      return {
+        productName: product.productName,
+        nextStock,
+      };
+    })
+    .filter((item) => item.nextStock < 0);
+
+  if (insufficientProducts.length) {
+    return {
+      error: {
+        status: 400,
+        message: `Insufficient stock for ${insufficientProducts.map((item) => item.productName).join(', ')}`,
+      },
+    };
+  }
+
+  await Promise.all(
+    products.map((product) => {
+      const delta = Number(quantityMap.get(String(product._id)) || 0);
+      if (!delta) {
+        return Promise.resolve();
+      }
+
+      return Product.updateOne({ _id: product._id }, { $inc: { currentStock: delta } });
+    })
+  );
+
+  return { error: null };
+};
+
+const isStockDeductedBill = (bill) => Boolean(bill?.stockDeductedAt);
+
+const shouldMaintainDeductedStock = (bill) => {
+  const normalizedStatus = String(bill?.status || '').toLowerCase();
+  return isStockDeductedBill(bill) || ['shipped', 'delivered', 'completed'].includes(normalizedStatus);
+};
+
 const buildBillSearchValue = (bill) => {
   const itemValues = Array.isArray(bill?.items)
     ? bill.items.flatMap((item) => [
@@ -175,6 +275,7 @@ const createBill = async (req, res) => {
       userId: req.user._id,
       ...prepared.payload,
       status: 'ordered',
+      stockDeductedAt: null,
     });
 
     const populated = await Bill.findById(created._id)
@@ -291,7 +392,9 @@ const markBillsAsShipped = async (req, res) => {
       ? { deliveryManId: req.user._id }
       : {};
 
-    const existingBills = await Bill.find({ _id: { $in: billIds }, ...scope }).select('_id status');
+    const existingBills = await Bill.find({ _id: { $in: billIds }, ...scope }).select(
+      '_id status deliveryManId stockDeductedAt items'
+    );
 
     if (existingBills.length === 0) {
       return res.status(404).json({
@@ -300,14 +403,33 @@ const markBillsAsShipped = async (req, res) => {
       });
     }
 
-    const updatableBillIds = existingBills
+    const updatableBills = existingBills
       .filter((bill) => !['cancelled', 'completed'].includes(String(bill.status || '').toLowerCase()))
-      .map((bill) => bill._id);
+      .map((bill) => bill);
+
+    const updatableBillIds = updatableBills.map((bill) => bill._id);
 
     if (updatableBillIds.length === 0) {
       return res.status(400).json({
         success: false,
         message: 'Completed or cancelled bills cannot be marked as shipped',
+      });
+    }
+
+    const stockAdjustment = await applyProductStockAdjustments(
+      updatableBills
+        .filter((bill) => !isStockDeductedBill(bill))
+        .reduce(
+          (mergedMap, bill) =>
+            mergeQuantityMaps(mergedMap, buildQuantityMapFromBillItems(bill.items, -1)),
+          new Map()
+        )
+    );
+
+    if (stockAdjustment.error) {
+      return res.status(stockAdjustment.error.status).json({
+        success: false,
+        message: stockAdjustment.error.message,
       });
     }
 
@@ -317,6 +439,7 @@ const markBillsAsShipped = async (req, res) => {
         $set: {
           status: 'shipped',
           deliveryManId: deliveryMan._id,
+          stockDeductedAt: new Date(),
         },
       }
     );
@@ -450,6 +573,22 @@ const updateBill = async (req, res) => {
       });
     }
 
+    if (shouldMaintainDeductedStock(existingBill)) {
+      const stockAdjustment = await applyProductStockAdjustments(
+        mergeQuantityMaps(
+          buildQuantityMapFromBillItems(existingBill.items, 1),
+          buildQuantityMapFromBillItems(prepared.payload.items, -1)
+        )
+      );
+
+      if (stockAdjustment.error) {
+        return res.status(stockAdjustment.error.status).json({
+          success: false,
+          message: stockAdjustment.error.message,
+        });
+      }
+    }
+
     existingBill.routeId = prepared.payload.routeId;
     existingBill.shopId = prepared.payload.shopId;
     existingBill.items = prepared.payload.items;
@@ -494,6 +633,19 @@ const deleteBill = async (req, res) => {
         success: false,
         message: 'Only ordered bills can be deleted',
       });
+    }
+
+    if (isStockDeductedBill(existingBill)) {
+      const stockAdjustment = await applyProductStockAdjustments(
+        buildQuantityMapFromBillItems(existingBill.items, 1)
+      );
+
+      if (stockAdjustment.error) {
+        return res.status(stockAdjustment.error.status).json({
+          success: false,
+          message: stockAdjustment.error.message,
+        });
+      }
     }
 
     await Bill.deleteOne({ _id: existingBill._id });
@@ -546,6 +698,23 @@ const bulkDeleteBills = async (req, res) => {
     }
 
     const deletableIds = deletableBills.map((bill) => bill._id);
+    const stockAdjustment = await applyProductStockAdjustments(
+      deletableBills
+        .filter((bill) => isStockDeductedBill(bill))
+        .reduce(
+          (mergedMap, bill) =>
+            mergeQuantityMaps(mergedMap, buildQuantityMapFromBillItems(bill.items, 1)),
+          new Map()
+        )
+    );
+
+    if (stockAdjustment.error) {
+      return res.status(stockAdjustment.error.status).json({
+        success: false,
+        message: stockAdjustment.error.message,
+      });
+    }
+
     await Bill.deleteMany({ _id: { $in: deletableIds } });
 
     return res.status(200).json({

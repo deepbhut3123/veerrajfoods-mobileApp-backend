@@ -30,6 +30,11 @@ const productSchema = new mongoose.Schema(
       required: [true, 'productRate is required'],
       min: [0, 'productRate must be greater than or equal to 0'],
     },
+    currentStock: {
+      type: Number,
+      default: 0,
+      min: [0, 'currentStock must be greater than or equal to 0'],
+    },
   },
   {
     timestamps: true,

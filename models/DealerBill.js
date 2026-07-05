@@ -7,6 +7,11 @@ const dealerBillItemSchema = new mongoose.Schema(
       ref: 'DealerProduct',
       default: null,
     },
+    stockProductId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product',
+      default: null,
+    },
     mrp: {
       type: Number,
       required: [true, 'mrp is required'],
