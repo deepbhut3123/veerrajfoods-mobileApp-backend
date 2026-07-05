@@ -70,6 +70,55 @@ const formatTimeOnly = (value) => {
   }).format(date);
 };
 
+const getTimeZoneOffsetMinutes = (date, timeZone) => {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+
+  const parts = formatter.formatToParts(date);
+  const year = Number(parts.find((part) => part.type === 'year')?.value || 0);
+  const month = Number(parts.find((part) => part.type === 'month')?.value || 0);
+  const day = Number(parts.find((part) => part.type === 'day')?.value || 0);
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value || 0);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value || 0);
+  const second = Number(parts.find((part) => part.type === 'second')?.value || 0);
+  const zonedTime = Date.UTC(year, month - 1, day, hour, minute, second);
+
+  return (zonedTime - date.getTime()) / 60000;
+};
+
+const createAttendanceDateTime = (dateValue, hours, minutes) => {
+  const [year, month, day] = String(dateValue || '').split('-').map(Number);
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day) ||
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes)
+  ) {
+    return null;
+  }
+
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0));
+  const firstOffset = getTimeZoneOffsetMinutes(utcGuess, ATTENDANCE_TIMEZONE);
+  let zonedDate = new Date(utcGuess.getTime() - firstOffset * 60000);
+  const secondOffset = getTimeZoneOffsetMinutes(zonedDate, ATTENDANCE_TIMEZONE);
+
+  if (secondOffset !== firstOffset) {
+    zonedDate = new Date(utcGuess.getTime() - secondOffset * 60000);
+  }
+
+  return zonedDate;
+};
+
 const parseAttendanceTime = (dateValue, timeValue) => {
   const normalizedDate = String(dateValue || '').trim();
   const normalizedTime = String(timeValue || '').trim().toUpperCase();
@@ -104,13 +153,7 @@ const parseAttendanceTime = (dateValue, timeValue) => {
     hours += 12;
   }
 
-  const parsed = new Date(`${normalizedDate}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  parsed.setHours(hours, minutes, 0, 0);
-  return parsed;
+  return createAttendanceDateTime(normalizedDate, hours, minutes);
 };
 
 const parseCoordinate = (value) => {
@@ -809,6 +852,49 @@ const updateAdminAttendance = async (req, res) => {
     });
   }
 };
+const deleteAdminAttendance = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(String(id))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid attendance id',
+      });
+    }
+
+    const deletedAttendance = await Attendance.findByIdAndDelete(id).populate('userId', 'name email roleId');
+
+    if (!deletedAttendance) {
+      return res.status(404).json({
+        success: false,
+        message: 'Attendance record not found',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Attendance deleted successfully',
+      data: formatAttendanceResponse({
+        ...deletedAttendance.toObject(),
+        user: deletedAttendance.userId
+          ? {
+              _id: deletedAttendance.userId._id,
+              name: deletedAttendance.userId.name,
+              email: deletedAttendance.userId.email,
+              roleId: deletedAttendance.userId.roleId,
+            }
+          : null,
+      }),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete attendance',
+      error: error.message,
+    });
+  }
+};
 
 module.exports = {
   getAdminAttendance,
@@ -822,5 +908,5 @@ module.exports = {
   markMyAttendanceBreakIn,
   markMyAttendanceBreakOut,
   updateAdminAttendance,
+  deleteAdminAttendance,
 };
-

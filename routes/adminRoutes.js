@@ -13,6 +13,7 @@ const {
 const {
   getAdminAttendance,
   updateAdminAttendance,
+  deleteAdminAttendance,
 } = require('../controllers/attendanceController');
 const {
   createStockEntry,
@@ -29,6 +30,10 @@ const {
   deletePurchase,
 } = require('../controllers/purchaseController');
 const {
+  createPurchaseProduct,
+  getAllPurchaseProducts,
+} = require('../controllers/purchaseProductController');
+const {
   createExpenseEntry,
   getAllExpenseEntries,
   getExpenseEntryById,
@@ -43,6 +48,7 @@ router.use(protect);
 router.get('/dashboard/summary', requireAdmin, getAdminDashboardSummary);
 router.get('/attendance', requireAdmin, getAdminAttendance);
 router.put('/attendance/:id', requireAdmin, updateAdminAttendance);
+router.delete('/attendance/:id', requireAdmin, deleteAdminAttendance);
 router.get('/profile', (req, res) => {
   res.status(200).json({
     success: true,
@@ -65,6 +71,8 @@ router.get('/retailer/stocks/:id', requireAdmin, getStockEntryById);
 router.post('/retailer/stocks', requireAdmin, createStockEntry);
 router.put('/retailer/stocks/:id', requireAdmin, updateStockEntry);
 router.delete('/retailer/stocks/:id', requireAdmin, deleteStockEntry);
+router.get('/expenses/purchase-products', requireAdmin, getAllPurchaseProducts);
+router.post('/expenses/purchase-products', requireAdmin, createPurchaseProduct);
 router.get('/expenses/purchases', requireAdmin, getAllPurchases);
 router.get('/expenses/purchases/:id', requireAdmin, getPurchaseById);
 router.post('/expenses/purchases', requireAdmin, createPurchase);
