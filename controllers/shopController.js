@@ -77,7 +77,7 @@ const getShopRoutes = async (req, res) => {
 
 const createShop = async (req, res) => {
   try {
-    const { routeId, shopName, shopAddress, mobileNumber, imageUrl, latitude, longitude } = req.body;
+    const { routeId, shopName, shopNameGujarati, shopAddress, mobileNumber, imageUrl, latitude, longitude } = req.body;
 
     if (!routeId || !shopName || !shopAddress || !mobileNumber) {
       return res.status(400).json({
@@ -122,6 +122,7 @@ const createShop = async (req, res) => {
       routeId,
       userId: req.user._id,
       shopName: shopName.trim(),
+      shopNameGujarati: shopNameGujarati && shopNameGujarati.trim() ? shopNameGujarati.trim() : '',
       shopAddress: shopAddress.trim(),
       mobileNumber: mobileNumber.trim(),
       latitude: hasLocation ? parsedLatitude : null,
@@ -130,7 +131,7 @@ const createShop = async (req, res) => {
     });
 
     const populated = await Shop.findById(created._id)
-      .populate('routeId', 'routeName cityName')
+      .populate('routeId', 'routeName routeNameGujarati cityName cityNameGujarati')
       .populate('userId', 'name email roleId');
 
     return res.status(201).json({
@@ -156,7 +157,7 @@ const createShop = async (req, res) => {
 
 const updateShop = async (req, res) => {
   try {
-    const { routeId, shopName, shopAddress, mobileNumber, imageUrl, latitude, longitude } = req.body;
+    const { routeId, shopName, shopNameGujarati, shopAddress, mobileNumber, imageUrl, latitude, longitude } = req.body;
 
     if (!routeId || !shopName || !shopAddress || !mobileNumber) {
       return res.status(400).json({
@@ -214,6 +215,7 @@ const updateShop = async (req, res) => {
 
     shop.routeId = routeId;
     shop.shopName = shopName.trim();
+    shop.shopNameGujarati = shopNameGujarati && shopNameGujarati.trim() ? shopNameGujarati.trim() : '';
     shop.shopAddress = shopAddress.trim();
     shop.mobileNumber = mobileNumber.trim();
     if (hasLocation) {
@@ -228,7 +230,7 @@ const updateShop = async (req, res) => {
     await shop.save();
 
     const populated = await Shop.findById(shop._id)
-      .populate('routeId', 'routeName cityName')
+      .populate('routeId', 'routeName routeNameGujarati cityName cityNameGujarati')
       .populate('userId', 'name email roleId');
 
     return res.status(200).json({
@@ -288,7 +290,7 @@ const deleteShop = async (req, res) => {
 const getMyShops = async (req, res) => {
   try {
     const shops = await Shop.find({ userId: req.user._id })
-      .populate('routeId', 'routeName cityName')
+      .populate('routeId', 'routeName routeNameGujarati cityName cityNameGujarati')
       .populate('userId', 'name email roleId')
       .sort({ createdAt: -1 });
 
@@ -315,7 +317,12 @@ const getAllShops = async (req, res) => {
       const regex = new RegExp(escapeRegex(search), 'i');
       const [matchingRoutes, matchingUsers] = await Promise.all([
         Route.find({
-          $or: [{ routeName: regex }, { cityName: regex }],
+          $or: [
+            { routeName: regex },
+            { routeNameGujarati: regex },
+            { cityName: regex },
+            { cityNameGujarati: regex },
+          ],
         }).select('_id'),
         User.find({
           $or: [{ name: regex }, { email: regex }],
@@ -328,6 +335,7 @@ const getAllShops = async (req, res) => {
       filter = {
         $or: [
           { shopName: regex },
+          { shopNameGujarati: regex },
           { shopAddress: regex },
           { mobileNumber: regex },
           ...(routeIds.length ? [{ routeId: { $in: routeIds } }] : []),
@@ -337,7 +345,7 @@ const getAllShops = async (req, res) => {
     }
 
     const shops = await Shop.find(filter)
-      .populate('routeId', 'routeName cityName')
+      .populate('routeId', 'routeName routeNameGujarati cityName cityNameGujarati')
       .populate('userId', 'name email roleId')
       .sort({ createdAt: -1 });
 

@@ -18,6 +18,11 @@ const shopSchema = new mongoose.Schema(
       trim: true,
       minlength: [2, 'shopName must be at least 2 characters'],
     },
+    shopNameGujarati: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     shopAddress: {
       type: String,
       required: [true, 'shopAddress is required'],

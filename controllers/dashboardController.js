@@ -111,7 +111,9 @@ const getAllAdminRoutes = async (req, res) => {
       filter = {
         $or: [
           { routeName: regex },
+          { routeNameGujarati: regex },
           { cityName: regex },
+          { cityNameGujarati: regex },
           ...(userIds.length ? [{ userId: { $in: userIds } }] : []),
         ],
       };
@@ -139,4 +141,6 @@ module.exports = {
   getAdminDashboardSummary,
   getAllAdminRoutes,
 };
+
+
 

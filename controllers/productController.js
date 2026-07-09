@@ -151,7 +151,7 @@ const getNextSequence = async () => {
 
 const createProduct = async (req, res) => {
   try {
-    const { productName, mrp, productRate } = req.body;
+    const { productName, productNameGujarati, mrp, productRate } = req.body;
 
     if (!productName || !String(productName).trim()) {
       return res.status(400).json({
@@ -174,6 +174,8 @@ const createProduct = async (req, res) => {
       userId: req.user._id,
       sequence: await getNextSequence(),
       productName: String(productName).trim(),
+      productNameGujarati:
+        productNameGujarati && String(productNameGujarati).trim() ? String(productNameGujarati).trim() : '',
       mrp: parsedMrp,
       productRate: parsedProductRate,
       currentStock: 0,
@@ -250,7 +252,7 @@ const getProductById = async (req, res) => {
 
 const updateProduct = async (req, res) => {
   try {
-    const { productName, mrp, productRate } = req.body;
+    const { productName, productNameGujarati, mrp, productRate } = req.body;
 
     if (!productName || !String(productName).trim()) {
       return res.status(400).json({
@@ -273,6 +275,8 @@ const updateProduct = async (req, res) => {
       req.params.id,
       {
         productName: String(productName).trim(),
+        productNameGujarati:
+          productNameGujarati && String(productNameGujarati).trim() ? String(productNameGujarati).trim() : '',
         mrp: parsedMrp,
         productRate: parsedProductRate,
       },

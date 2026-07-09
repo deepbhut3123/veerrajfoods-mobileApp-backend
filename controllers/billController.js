@@ -138,9 +138,12 @@ const buildBillSearchValue = (bill) => {
     bill?.updatedAt,
     bill?.routeId?._id,
     bill?.routeId?.routeName,
+    bill?.routeId?.routeNameGujarati,
     bill?.routeId?.cityName,
+    bill?.routeId?.cityNameGujarati,
     bill?.shopId?._id,
     bill?.shopId?.shopName,
+    bill?.shopId?.shopNameGujarati,
     bill?.shopId?.shopAddress,
     bill?.shopId?.mobileNumber,
     bill?.customerId?.name,
@@ -282,8 +285,8 @@ const createBill = async (req, res) => {
       .populate('userId', 'name email roleId')
       .populate('deliveryManId', 'name email roleId isActive')
       .populate('items.productId', 'mrp productName')
-      .populate('routeId', 'routeName cityName')
-      .populate('shopId', 'shopName shopAddress mobileNumber');
+      .populate('routeId', 'routeName routeNameGujarati cityName cityNameGujarati')
+      .populate('shopId', 'shopName shopNameGujarati shopAddress mobileNumber');
 
     return res.status(201).json({
       success: true,
@@ -302,8 +305,8 @@ const createBill = async (req, res) => {
 const getMyBills = async (req, res) => {
   try {
     const bills = await Bill.find({ userId: req.user._id })
-      .populate('routeId', 'routeName cityName')
-      .populate('shopId', 'shopName shopAddress mobileNumber')
+      .populate('routeId', 'routeName routeNameGujarati cityName cityNameGujarati')
+      .populate('shopId', 'shopName shopNameGujarati shopAddress mobileNumber')
       .populate('deliveryManId', 'name email roleId isActive')
       .sort({ createdAt: -1 });
 
@@ -332,8 +335,8 @@ const getAllAdminBills = async (req, res) => {
       .populate('userId', 'name email roleId')
       .populate('deliveryManId', 'name email roleId isActive')
       .populate('items.productId', 'mrp productName')
-      .populate('routeId', 'routeName cityName')
-      .populate('shopId', 'shopName shopAddress mobileNumber')
+      .populate('routeId', 'routeName routeNameGujarati cityName cityNameGujarati')
+      .populate('shopId', 'shopName shopNameGujarati shopAddress mobileNumber')
       .sort({ createdAt: -1 });
 
     const filteredBills = search
@@ -600,8 +603,8 @@ const updateBill = async (req, res) => {
       .populate('userId', 'name email roleId')
       .populate('deliveryManId', 'name email roleId isActive')
       .populate('items.productId', 'mrp productName')
-      .populate('routeId', 'routeName cityName')
-      .populate('shopId', 'shopName shopAddress mobileNumber');
+      .populate('routeId', 'routeName routeNameGujarati cityName cityNameGujarati')
+      .populate('shopId', 'shopName shopNameGujarati shopAddress mobileNumber');
 
     return res.status(200).json({
       success: true,
@@ -745,6 +748,7 @@ module.exports = {
   markBillsAsShipped,
   markBillsAsCompleted,
 };
+
 
 
 

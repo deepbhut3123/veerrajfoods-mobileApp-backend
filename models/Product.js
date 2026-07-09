@@ -20,6 +20,11 @@ const productSchema = new mongoose.Schema(
       trim: true,
       minlength: [2, 'productName must be at least 2 characters'],
     },
+    productNameGujarati: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     mrp: {
       type: Number,
       required: [true, 'mrp is required'],

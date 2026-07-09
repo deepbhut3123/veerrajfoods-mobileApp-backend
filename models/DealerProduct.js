@@ -19,6 +19,11 @@ const dealerProductSchema = new mongoose.Schema(
       trim: true,
       minlength: [2, 'productName must be at least 2 characters'],
     },
+    productNameGujarati: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     productRate: {
       type: Number,
       required: [true, 'productRate is required'],

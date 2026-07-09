@@ -67,6 +67,7 @@ const buildProductSearchValue = (product) =>
     product?._id,
     product?.mrp,
     product?.productName,
+    product?.productNameGujarati,
     product?.productRate,
     product?.userId?.name,
     product?.userId?.email,
@@ -77,7 +78,7 @@ const buildProductSearchValue = (product) =>
 
 const createDealerProduct = async (req, res) => {
   try {
-    const { mrp, productName, productRate } = req.body;
+    const { mrp, productName, productNameGujarati, productRate } = req.body;
 
     if (!productName || !String(productName).trim()) {
       return res.status(400).json({
@@ -99,6 +100,8 @@ const createDealerProduct = async (req, res) => {
       userId: req.user._id,
       mrp: parsedMrp,
       productName: String(productName).trim(),
+      productNameGujarati:
+        productNameGujarati && String(productNameGujarati).trim() ? String(productNameGujarati).trim() : '',
       productRate: parsedRate,
       sequence: await getNextSequence(),
     });
@@ -153,7 +156,7 @@ const getAllDealerProducts = async (req, res) => {
 
 const updateDealerProduct = async (req, res) => {
   try {
-    const { mrp, productName, productRate } = req.body;
+    const { mrp, productName, productNameGujarati, productRate } = req.body;
 
     if (!productName || !String(productName).trim()) {
       return res.status(400).json({
@@ -176,6 +179,8 @@ const updateDealerProduct = async (req, res) => {
       {
         mrp: parsedMrp,
         productName: String(productName).trim(),
+        productNameGujarati:
+          productNameGujarati && String(productNameGujarati).trim() ? String(productNameGujarati).trim() : '',
         productRate: parsedRate,
       },
       { returnDocument: 'after', runValidators: true }

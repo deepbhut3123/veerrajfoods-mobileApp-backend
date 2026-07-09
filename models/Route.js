@@ -14,11 +14,21 @@ const routeSchema = new mongoose.Schema(
       trim: true,
       minlength: [2, 'routeName must be at least 2 characters'],
     },
+    routeNameGujarati: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     cityName: {
       type: String,
       required: [true, 'cityName is required'],
       trim: true,
       minlength: [2, 'cityName must be at least 2 characters'],
+    },
+    cityNameGujarati: {
+      type: String,
+      trim: true,
+      default: '',
     },
   },
   {

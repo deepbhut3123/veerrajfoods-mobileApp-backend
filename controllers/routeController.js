@@ -18,7 +18,7 @@ const getRouteScope = (req, routeId) => {
 
 const createRoute = async (req, res) => {
   try {
-    const { routeName, cityName } = req.body;
+    const { routeName, routeNameGujarati, cityName, cityNameGujarati } = req.body;
 
     if (!routeName || !routeName.trim() || !cityName || !cityName.trim()) {
       return res.status(400).json({
@@ -30,7 +30,9 @@ const createRoute = async (req, res) => {
     const created = await Route.create({
       userId: req.user._id,
       routeName: routeName.trim(),
+      routeNameGujarati: routeNameGujarati && routeNameGujarati.trim() ? routeNameGujarati.trim() : '',
       cityName: cityName.trim(),
+      cityNameGujarati: cityNameGujarati && cityNameGujarati.trim() ? cityNameGujarati.trim() : '',
     });
 
     return res.status(201).json({
@@ -91,7 +93,7 @@ const getRouteById = async (req, res) => {
 
 const updateRoute = async (req, res) => {
   try {
-    const { routeName, cityName } = req.body;
+    const { routeName, routeNameGujarati, cityName, cityNameGujarati } = req.body;
 
     if (!routeName || !routeName.trim() || !cityName || !cityName.trim()) {
       return res.status(400).json({
@@ -102,7 +104,12 @@ const updateRoute = async (req, res) => {
 
     const updated = await Route.findOneAndUpdate(
       getRouteScope(req, req.params.id),
-      { routeName: routeName.trim(), cityName: cityName.trim() },
+      {
+        routeName: routeName.trim(),
+        routeNameGujarati: routeNameGujarati && routeNameGujarati.trim() ? routeNameGujarati.trim() : '',
+        cityName: cityName.trim(),
+        cityNameGujarati: cityNameGujarati && cityNameGujarati.trim() ? cityNameGujarati.trim() : '',
+      },
       { returnDocument: 'after', runValidators: true }
     );
 
