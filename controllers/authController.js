@@ -9,9 +9,10 @@ const ADMIN_AUTHENTICATOR_SECRET = process.env.ADMIN_AUTHENTICATOR_SECRET || '';
 const BASE32_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 const signToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d',
-  });
+  const jwtExpiresIn = process.env.JWT_EXPIRES_IN?.trim();
+  const jwtOptions = jwtExpiresIn ? { expiresIn: jwtExpiresIn } : undefined;
+
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, jwtOptions);
 };
 
 const signVerificationToken = (userId) =>
@@ -494,5 +495,6 @@ module.exports = {
   resetPassword,
   logout,
 };
+
 
 
