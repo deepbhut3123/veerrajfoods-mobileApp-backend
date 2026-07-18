@@ -25,6 +25,7 @@ const sanitizeUser = (user) => ({
   name: user.name,
   email: user.email,
   roleId: user.roleId,
+  salary: user.salary ?? null,
   isActive: user.isActive !== false,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
@@ -495,6 +496,7 @@ module.exports = {
   resetPassword,
   logout,
 };
+
 
 
 

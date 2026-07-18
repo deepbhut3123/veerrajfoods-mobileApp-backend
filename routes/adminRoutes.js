@@ -40,6 +40,36 @@ const {
   updateExpenseEntry,
   deleteExpenseEntry,
 } = require('../controllers/expenseEntryController');
+const {
+  getAllOnlineCustomers,
+  getOnlineCustomerById,
+  createOnlineCustomer,
+  updateOnlineCustomer,
+  deleteOnlineCustomer,
+} = require('../controllers/onlineCustomerController');
+const {
+  getAllOnlineProducts,
+  getOnlineProductById,
+  createOnlineProduct,
+  updateOnlineProduct,
+  deleteOnlineProduct,
+} = require('../controllers/onlineProductController');
+const {
+  getAllOnlineStockEntries,
+  getOnlineStockEntryById,
+  createOnlineStockEntry,
+  updateOnlineStockEntry,
+  deleteOnlineStockEntry,
+} = require('../controllers/onlineStockEntryController');
+const {
+  getAllOnlineOrders,
+  getOnlineOrderById,
+  createOnlineOrder,
+  updateOnlineOrder,
+  markOnlineOrderDelivered,
+  completeOnlineOrderPayment,
+  deleteOnlineOrder,
+} = require('../controllers/onlineOrderController');
 
 const router = express.Router();
 
@@ -83,5 +113,31 @@ router.get('/expenses/entries/:id', requireAdmin, getExpenseEntryById);
 router.post('/expenses/entries', requireAdmin, createExpenseEntry);
 router.put('/expenses/entries/:id', requireAdmin, updateExpenseEntry);
 router.delete('/expenses/entries/:id', requireAdmin, deleteExpenseEntry);
+router.get('/online/customers', requireAdmin, getAllOnlineCustomers);
+router.get('/online/customers/:id', requireAdmin, getOnlineCustomerById);
+router.post('/online/customers', requireAdmin, createOnlineCustomer);
+router.put('/online/customers/:id', requireAdmin, updateOnlineCustomer);
+router.delete('/online/customers/:id', requireAdmin, deleteOnlineCustomer);
+router.get('/online/products', requireAdmin, getAllOnlineProducts);
+router.get('/online/products/:id', requireAdmin, getOnlineProductById);
+router.post('/online/products', requireAdmin, createOnlineProduct);
+router.put('/online/products/:id', requireAdmin, updateOnlineProduct);
+router.delete('/online/products/:id', requireAdmin, deleteOnlineProduct);
+router.get('/online/stocks', requireAdmin, getAllOnlineStockEntries);
+router.get('/online/stocks/:id', requireAdmin, getOnlineStockEntryById);
+router.post('/online/stocks', requireAdmin, createOnlineStockEntry);
+router.put('/online/stocks/:id', requireAdmin, updateOnlineStockEntry);
+router.delete('/online/stocks/:id', requireAdmin, deleteOnlineStockEntry);
+router.get('/online/orders', requireAdmin, getAllOnlineOrders);
+router.get('/online/orders/:id', requireAdmin, getOnlineOrderById);
+router.post('/online/orders', requireAdmin, createOnlineOrder);
+router.put('/online/orders/:id', requireAdmin, updateOnlineOrder);
+router.patch('/online/orders/:id/delivery', requireAdmin, markOnlineOrderDelivered);
+router.patch('/online/orders/:id/payment', requireAdmin, completeOnlineOrderPayment);
+router.delete('/online/orders/:id', requireAdmin, deleteOnlineOrder);
 
 module.exports = router;
+
+
+
+

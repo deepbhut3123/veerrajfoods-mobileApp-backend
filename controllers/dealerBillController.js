@@ -268,6 +268,7 @@ const buildDealerBillPayload = async ({ dealerId, billDate, kattaCount, items })
       productName: String(item?.productName || '').trim(),
       mrp: Number(item?.mrp || 0),
       productRate: Number(item?.productRate || 0),
+      amount: Number(item?.amount),
       quantity: Number(item?.quantity),
     }))
     .filter(
@@ -278,7 +279,8 @@ const buildDealerBillPayload = async ({ dealerId, billDate, kattaCount, items })
         Number.isFinite(item.mrp) &&
         item.mrp >= 0 &&
         Number.isFinite(item.productRate) &&
-        item.productRate >= 0,
+        item.productRate >= 0 &&
+        (!Number.isFinite(item.amount) || item.amount >= 0),
     );
 
   if (normalizedItems.length === 0) {
@@ -313,9 +315,11 @@ const buildDealerBillPayload = async ({ dealerId, billDate, kattaCount, items })
     const rate = item.productRate;
     const mrp = linkedProduct ? Number(linkedProduct.mrp) : item.mrp;
     const productName = linkedProduct ? linkedProduct.productName : item.productName;
-    const amount = linkedProduct
-      ? calculateAmountFromMargin(rate, dealer.margin)
-      : rate;
+    const amount = Number.isFinite(item.amount)
+      ? item.amount
+      : linkedProduct
+        ? calculateAmountFromMargin(rate, dealer.margin)
+        : rate;
     const stockResolution = resolveStockProduct(
       {
         productName,
