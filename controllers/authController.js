@@ -23,7 +23,8 @@ const signVerificationToken = (userId) =>
 const sanitizeUser = (user) => ({
   id: user._id,
   name: user.name,
-  email: user.email,
+  email: user.email || '',
+  mobileNumber: user.mobileNumber || '',
   roleId: user.roleId,
   salary: user.salary ?? null,
   isActive: user.isActive !== false,
@@ -166,21 +167,28 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, identifier, mobileNumber, password } = req.body;
+    const loginIdentifier = String(identifier ?? email ?? mobileNumber ?? '').trim();
 
-    if (!email || !password) {
+    if (!loginIdentifier || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Email and password are required',
+        message: 'Email/mobile number and password are required',
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    const normalizedEmail = loginIdentifier.toLowerCase();
+    const user = await User.findOne({
+      $or: [
+        { email: normalizedEmail },
+        { mobileNumber: loginIdentifier },
+      ],
+    }).select('+password');
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password',
+        message: 'Invalid email/mobile number or password',
       });
     }
 
@@ -196,7 +204,7 @@ const login = async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid email or password',
+        message: 'Invalid email/mobile number or password',
       });
     }
 

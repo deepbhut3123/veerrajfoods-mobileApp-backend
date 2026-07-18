@@ -371,20 +371,15 @@ const markBillsAsShipped = async (req, res) => {
       });
     }
 
-    if (!deliveryManId) {
-      return res.status(400).json({
-        success: false,
-        message: 'deliveryManId is required',
-      });
-    }
+    const deliveryMan = deliveryManId
+      ? await User.findOne({
+          _id: deliveryManId,
+          roleId: 6,
+          isActive: true,
+        }).select('_id name email roleId isActive')
+      : null;
 
-    const deliveryMan = await User.findOne({
-      _id: deliveryManId,
-      roleId: 6,
-      isActive: true,
-    }).select('_id name email roleId isActive');
-
-    if (!deliveryMan) {
+    if (deliveryManId && !deliveryMan) {
       return res.status(404).json({
         success: false,
         message: 'Active delivery man not found',
@@ -436,20 +431,27 @@ const markBillsAsShipped = async (req, res) => {
       });
     }
 
+    const updatePayload = {
+      status: 'shipped',
+      stockDeductedAt: new Date(),
+    };
+
+    if (deliveryMan) {
+      updatePayload.deliveryManId = deliveryMan._id;
+    }
+
     await Bill.updateMany(
       { _id: { $in: updatableBillIds } },
       {
-        $set: {
-          status: 'shipped',
-          deliveryManId: deliveryMan._id,
-          stockDeductedAt: new Date(),
-        },
+        $set: updatePayload,
       }
     );
 
     return res.status(200).json({
       success: true,
-      message: 'Selected bills assigned and marked as shipped',
+      message: deliveryMan
+        ? 'Selected bills assigned and marked as shipped'
+        : 'Selected bills marked as shipped',
       data: {
         updatedCount: updatableBillIds.length,
         skippedCount: existingBills.length - updatableBillIds.length,

@@ -85,7 +85,8 @@ router.get('/profile', (req, res) => {
     user: {
       id: req.user._id,
       name: req.user.name,
-      email: req.user.email,
+      email: req.user.email || '',
+      mobileNumber: req.user.mobileNumber || '',
       roleId: req.user.roleId,
     },
   });

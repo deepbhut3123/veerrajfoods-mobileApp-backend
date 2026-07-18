@@ -4,7 +4,8 @@ const User = require('../models/User');
 const sanitizeUser = (user) => ({
   id: user._id,
   name: user.name,
-  email: user.email,
+  email: user.email || '',
+  mobileNumber: user.mobileNumber || '',
   roleId: user.roleId,
   salary: user.salary ?? null,
   isActive: user.isActive,
@@ -26,7 +27,7 @@ const normalizeSalary = (value) => {
 const getAllUsers = async (_req, res) => {
   try {
     const users = await User.find({})
-      .select('name email roleId salary isActive createdAt updatedAt')
+      .select('name email mobileNumber roleId salary isActive createdAt updatedAt')
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -45,7 +46,7 @@ const getAllUsers = async (_req, res) => {
 
 const createUser = async (req, res) => {
   try {
-    const { name, email, password, roleId, salary, isActive } = req.body;
+    const { name, email, mobileNumber, password, roleId, salary, isActive } = req.body;
 
     if (!name || !String(name).trim() || !email || !String(email).trim() || !password) {
       return res.status(400).json({
@@ -86,11 +87,23 @@ const createUser = async (req, res) => {
       });
     }
 
+    const normalizedMobileNumber = mobileNumber ? String(mobileNumber).trim() : null;
+    if (normalizedMobileNumber) {
+      const existingMobileUser = await User.findOne({ mobileNumber: normalizedMobileNumber });
+      if (existingMobileUser) {
+        return res.status(409).json({
+          success: false,
+          message: 'Mobile number is already registered',
+        });
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
       name: String(name).trim(),
       email: String(email).toLowerCase().trim(),
+      ...(normalizedMobileNumber ? { mobileNumber: normalizedMobileNumber } : {}),
       password: hashedPassword,
       roleId: parsedRoleId,
       salary: parsedRoleId === STAFF_ROLE_ID ? parsedSalary : null,
@@ -113,7 +126,7 @@ const createUser = async (req, res) => {
 
 const updateUser = async (req, res) => {
   try {
-    const { name, email, password, roleId, salary, isActive } = req.body;
+    const { name, email, mobileNumber, password, roleId, salary, isActive } = req.body;
     const targetUser = await User.findById(req.params.id);
 
     if (!targetUser) {
@@ -160,6 +173,25 @@ const updateUser = async (req, res) => {
         });
       }
       targetUser.email = normalizedEmail;
+    }
+
+    if (mobileNumber !== undefined) {
+      const normalizedMobileNumber = String(mobileNumber).trim();
+      if (normalizedMobileNumber) {
+        const existingMobileUser = await User.findOne({
+          mobileNumber: normalizedMobileNumber,
+          _id: { $ne: targetUser._id },
+        });
+        if (existingMobileUser) {
+          return res.status(409).json({
+            success: false,
+            message: 'Mobile number is already registered',
+          });
+        }
+        targetUser.mobileNumber = normalizedMobileNumber;
+      } else {
+        targetUser.mobileNumber = undefined;
+      }
     }
 
     if (password !== undefined && String(password).trim()) {
@@ -282,6 +314,7 @@ const updateUserActiveStatus = async (req, res) => {
         id: targetUser._id,
         name: targetUser.name,
         email: targetUser.email,
+        mobileNumber: targetUser.mobileNumber || '',
         roleId: targetUser.roleId,
         salary: targetUser.salary ?? null,
         isActive: targetUser.isActive,

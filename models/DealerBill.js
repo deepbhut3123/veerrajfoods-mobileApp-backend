@@ -82,6 +82,16 @@ const dealerBillSchema = new mongoose.Schema(
       required: [true, 'totalAmount is required'],
       min: [0, 'totalAmount must be greater than or equal to 0'],
     },
+    status: {
+      type: String,
+      enum: ['ordered', 'shipped', 'completed', 'cancelled'],
+      default: 'ordered',
+      required: true,
+    },
+    stockDeductedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

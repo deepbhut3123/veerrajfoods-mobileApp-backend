@@ -18,6 +18,7 @@ const {
   getAllDealerBills,
   updateDealerBill,
   deleteDealerBill,
+  markDealerBillsAsShipped,
 } = require('../controllers/dealerBillController');
 const {
   createDealerPayment,
@@ -27,24 +28,25 @@ const {
 } = require('../controllers/dealerPaymentController');
 
 const router = express.Router();
-const allowAdminOrRoleFive = requireAnyRole(1, 5);
+const allowDealerBillAccess = requireAnyRole(1, 3, 5);
 
 router.use(protect);
 
-router.get('/dealers', allowAdminOrRoleFive, getAllDealers);
+router.get('/dealers', allowDealerBillAccess, getAllDealers);
 router.post('/dealers', requireAdmin, createDealer);
 router.put('/dealers/:id', requireAdmin, updateDealer);
 router.delete('/dealers/:id', requireAdmin, deleteDealer);
 
-router.get('/products', allowAdminOrRoleFive, getAllDealerProducts);
+router.get('/products', allowDealerBillAccess, getAllDealerProducts);
 router.post('/products', requireAdmin, createDealerProduct);
 router.patch('/products/reorder', requireAdmin, reorderDealerProducts);
 router.put('/products/:id', requireAdmin, updateDealerProduct);
 router.delete('/products/:id', requireAdmin, deleteDealerProduct);
 
-router.get('/bills', allowAdminOrRoleFive, getAllDealerBills);
-router.post('/bills', allowAdminOrRoleFive, createDealerBill);
-router.put('/bills/:id', requireAdmin, updateDealerBill);
+router.get('/bills', allowDealerBillAccess, getAllDealerBills);
+router.post('/bills', allowDealerBillAccess, createDealerBill);
+router.patch('/bills/ship', requireAdmin, markDealerBillsAsShipped);
+router.put('/bills/:id', allowDealerBillAccess, updateDealerBill);
 router.delete('/bills/:id', requireAdmin, deleteDealerBill);
 
 router.get('/payments', requireAdmin, getAllDealerPayments);

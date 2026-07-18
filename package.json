@@ -5,6 +5,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "migrate:dealers-to-users": "node scripts/migrateDealersToUsers.js",
+    "fix:skipped-dealer-users": "node scripts/fixSkippedDealerUsers.js",
+    "set:dealer-name-passwords": "node scripts/setDealerNamePasswords.js",
+    "set:bills-shipped": "node scripts/setAllBillsShipped.js",
+    "set:existing-dealer-bills-shipped": "node scripts/setExistingDealerBillsShipped.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {

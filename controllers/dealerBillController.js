@@ -3,6 +3,8 @@ const Dealer = require('../models/Dealer');
 const DealerBill = require('../models/DealerBill');
 const DealerProduct = require('../models/DealerProduct');
 
+const DEALER_ROLE_ID = 3;
+
 const calculateAmountFromMargin = (rate, margin) => {
   const normalizedRate = Number(rate || 0);
   const normalizedMargin = Number(margin || 0);
@@ -199,6 +201,7 @@ const buildBillSearchValue = (bill) => {
     bill?.billDate,
     bill?.kattaCount,
     bill?.totalAmount,
+    bill?.status,
     bill?.dealerId?._id,
     bill?.dealerId?.dealerName,
     bill?.dealerId?.contactNo,
@@ -371,6 +374,13 @@ const populateDealerBill = (query) =>
     .populate('items.productId', 'mrp productName productRate')
     .populate('items.stockProductId', 'mrp productName productRate currentStock');
 
+const isStockDeductedDealerBill = (bill) => Boolean(bill?.stockDeductedAt);
+
+const shouldMaintainDeductedStock = (bill) => {
+  const normalizedStatus = String(bill?.status || '').toLowerCase();
+  return isStockDeductedDealerBill(bill) || ['shipped', 'completed'].includes(normalizedStatus);
+};
+
 const createDealerBill = async (req, res) => {
   try {
     const { dealerId, billDate, kattaCount, items } = req.body;
@@ -383,20 +393,11 @@ const createDealerBill = async (req, res) => {
       });
     }
 
-    const stockAdjustment = await applyProductStockAdjustments(
-      buildQuantityMapFromBillItems(prepared.payload.items, -1)
-    );
-
-    if (stockAdjustment.error) {
-      return res.status(stockAdjustment.error.status).json({
-        success: false,
-        message: stockAdjustment.error.message,
-      });
-    }
-
     const created = await DealerBill.create({
       userId: req.user._id,
       ...prepared.payload,
+      status: 'ordered',
+      stockDeductedAt: null,
     });
 
     const populated = await populateDealerBill(DealerBill.findById(created._id));
@@ -421,10 +422,37 @@ const getAllDealerBills = async (req, res) => {
     const dealerId = String(req.query?.dealerId || '').trim();
     const fromDate = String(req.query?.fromDate || '').trim();
     const toDate = String(req.query?.toDate || '').trim();
+    const status = String(req.query?.status || '').trim().toLowerCase();
     const query = {};
+    const isDealerUser = Number(req.user?.roleId) === DEALER_ROLE_ID;
 
-    if (dealerId) {
+    if (isDealerUser) {
+      const dealer = await Dealer.findOne({ userId: req.user._id }).select('_id');
+
+      if (!dealer) {
+        return res.status(200).json({
+          success: true,
+          message: 'Dealer bills fetched successfully',
+          data: [],
+        });
+      }
+
+      query.dealerId = dealer._id;
+    }
+
+    if (dealerId && !isDealerUser) {
       query.dealerId = dealerId;
+    }
+
+    if (status === 'shipped') {
+      query.$or = [
+        { status: 'shipped' },
+        { status: { $exists: false } },
+        { status: null },
+        { status: '' },
+      ];
+    } else if (status) {
+      query.status = status;
     }
 
     if (fromDate || toDate) {
@@ -489,7 +517,36 @@ const updateDealerBill = async (req, res) => {
       });
     }
 
+    if (
+      Number(req.user?.roleId) !== 1 &&
+      String(existingBill.status || 'ordered').toLowerCase() !== 'ordered'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Only ordered dealer bills can be updated',
+      });
+    }
+
+    if (Number(req.user?.roleId) !== 1) {
+      const dealer = await Dealer.findOne({ userId: req.user._id }).select('_id');
+
+      if (!dealer || String(dealer._id) !== String(existingBill.dealerId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can update only your own ordered dealer bills',
+        });
+      }
+    }
+
     const { dealerId, billDate, kattaCount, items } = req.body;
+
+    if (Number(req.user?.roleId) !== 1 && String(dealerId) !== String(existingBill.dealerId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Dealer cannot be changed for your bill',
+      });
+    }
+
     const prepared = await buildDealerBillPayload({
       dealerId,
       billDate,
@@ -504,18 +561,20 @@ const updateDealerBill = async (req, res) => {
       });
     }
 
-    const stockAdjustment = await applyProductStockAdjustments(
-      mergeQuantityMaps(
-        buildQuantityMapFromBillItems(existingBill.items, 1),
-        buildQuantityMapFromBillItems(prepared.payload.items, -1),
-      )
-    );
+    if (shouldMaintainDeductedStock(existingBill)) {
+      const stockAdjustment = await applyProductStockAdjustments(
+        mergeQuantityMaps(
+          buildQuantityMapFromBillItems(existingBill.items, 1),
+          buildQuantityMapFromBillItems(prepared.payload.items, -1),
+        )
+      );
 
-    if (stockAdjustment.error) {
-      return res.status(stockAdjustment.error.status).json({
-        success: false,
-        message: stockAdjustment.error.message,
-      });
+      if (stockAdjustment.error) {
+        return res.status(stockAdjustment.error.status).json({
+          success: false,
+          message: stockAdjustment.error.message,
+        });
+      }
     }
 
     existingBill.dealerId = prepared.payload.dealerId;
@@ -552,15 +611,17 @@ const deleteDealerBill = async (req, res) => {
       });
     }
 
-    const stockAdjustment = await applyProductStockAdjustments(
-      buildQuantityMapFromBillItems(existingBill.items, 1)
-    );
+    if (isStockDeductedDealerBill(existingBill)) {
+      const stockAdjustment = await applyProductStockAdjustments(
+        buildQuantityMapFromBillItems(existingBill.items, 1)
+      );
 
-    if (stockAdjustment.error) {
-      return res.status(stockAdjustment.error.status).json({
-        success: false,
-        message: stockAdjustment.error.message,
-      });
+      if (stockAdjustment.error) {
+        return res.status(stockAdjustment.error.status).json({
+          success: false,
+          message: stockAdjustment.error.message,
+        });
+      }
     }
 
     const deleted = await DealerBill.findByIdAndDelete(req.params.id);
@@ -579,10 +640,100 @@ const deleteDealerBill = async (req, res) => {
   }
 };
 
+const markDealerBillsAsShipped = async (req, res) => {
+  try {
+    const billIds = Array.isArray(req.body?.billIds)
+      ? req.body.billIds.map((id) => String(id)).filter(Boolean)
+      : [];
+    const kattaCount = Number(req.body?.kattaCount);
+
+    if (billIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'billIds is required',
+      });
+    }
+
+    if (!Number.isFinite(kattaCount) || kattaCount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'kattaCount is required and must be greater than 0',
+      });
+    }
+
+    const existingBills = await DealerBill.find({ _id: { $in: billIds } }).select(
+      '_id status stockDeductedAt items'
+    );
+
+    if (existingBills.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No dealer bills found for the selected ids',
+      });
+    }
+
+    const updatableBills = existingBills.filter(
+      (bill) => !['cancelled', 'completed', 'shipped'].includes(String(bill.status || '').toLowerCase()),
+    );
+    const updatableBillIds = updatableBills.map((bill) => bill._id);
+
+    if (updatableBillIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Selected dealer bills are already shipped, completed, or cancelled',
+      });
+    }
+
+    const stockAdjustment = await applyProductStockAdjustments(
+      updatableBills
+        .filter((bill) => !isStockDeductedDealerBill(bill))
+        .reduce(
+          (mergedMap, bill) =>
+            mergeQuantityMaps(mergedMap, buildQuantityMapFromBillItems(bill.items, -1)),
+          new Map()
+        )
+    );
+
+    if (stockAdjustment.error) {
+      return res.status(stockAdjustment.error.status).json({
+        success: false,
+        message: stockAdjustment.error.message,
+      });
+    }
+
+    await DealerBill.updateMany(
+      { _id: { $in: updatableBillIds } },
+      {
+        $set: {
+          kattaCount: Math.trunc(kattaCount),
+          status: 'shipped',
+          stockDeductedAt: new Date(),
+        },
+      },
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Selected dealer bills marked as shipped',
+      data: {
+        updatedCount: updatableBillIds.length,
+        skippedCount: existingBills.length - updatableBillIds.length,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update dealer bill status',
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createDealerBill,
   getAllDealerBills,
   updateDealerBill,
   deleteDealerBill,
+  markDealerBillsAsShipped,
 };
 
