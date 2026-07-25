@@ -2,6 +2,7 @@ const Dealer = require('../models/Dealer');
 const DealerPayment = require('../models/DealerPayment');
 
 const PAYMENT_TYPES = new Set(['cash', 'online', 'bank']);
+const DEALER_ROLE_ID = 3;
 
 const getValidationMessage = (error, fallback) => {
   if (!error || typeof error !== 'object') {
@@ -155,8 +156,23 @@ const getAllDealerPayments = async (req, res) => {
     const fromDate = String(req.query?.fromDate || '').trim();
     const toDate = String(req.query?.toDate || '').trim();
     const query = {};
+    const isDealerUser = Number(req.user?.roleId) === DEALER_ROLE_ID;
 
-    if (dealerId) {
+    if (isDealerUser) {
+      const dealer = await Dealer.findOne({ userId: req.user._id }).select('_id');
+
+      if (!dealer) {
+        return res.status(200).json({
+          success: true,
+          message: 'Dealer payments fetched successfully',
+          data: [],
+        });
+      }
+
+      query.dealerId = dealer._id;
+    }
+
+    if (dealerId && !isDealerUser) {
       query.dealerId = dealerId;
     }
 

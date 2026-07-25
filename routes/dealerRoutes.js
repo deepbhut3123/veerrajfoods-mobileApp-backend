@@ -29,6 +29,7 @@ const {
 
 const router = express.Router();
 const allowDealerBillAccess = requireAnyRole(1, 3, 5);
+const allowDealerPaymentAccess = requireAnyRole(1, 3);
 
 router.use(protect);
 
@@ -49,7 +50,7 @@ router.patch('/bills/ship', requireAdmin, markDealerBillsAsShipped);
 router.put('/bills/:id', allowDealerBillAccess, updateDealerBill);
 router.delete('/bills/:id', requireAdmin, deleteDealerBill);
 
-router.get('/payments', requireAdmin, getAllDealerPayments);
+router.get('/payments', allowDealerPaymentAccess, getAllDealerPayments);
 router.post('/payments', requireAdmin, createDealerPayment);
 router.put('/payments/:id', requireAdmin, updateDealerPayment);
 router.delete('/payments/:id', requireAdmin, deleteDealerPayment);
