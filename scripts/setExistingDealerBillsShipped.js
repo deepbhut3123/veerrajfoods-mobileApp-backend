@@ -23,7 +23,7 @@ const run = async () => {
     {
       $set: {
         status: 'shipped',
-        stockDeductedAt: now,
+        stockDeductedAt: null,
       },
     },
   );

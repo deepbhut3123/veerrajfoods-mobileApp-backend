@@ -1,6 +1,5 @@
 const Product = require('../models/Product');
 const StockEntry = require('../models/StockEntry');
-const DealerBill = require('../models/DealerBill');
 
 const normalizeNumber = (value) => {
   if (value === undefined || value === null || String(value).trim() === '') {
@@ -26,30 +25,14 @@ const getValidationMessage = (error, fallback) => {
   return fallback;
 };
 
-const normalizeProductName = (value) =>
-  String(value || '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toLowerCase();
 
 const syncCurrentStockValues = async () => {
-  const products = await Product.find({}).select('_id productName mrp currentStock');
+  const products = await Product.find({}).select('_id currentStock');
   const stockEntries = await StockEntry.find({}).select('items');
-  const dealerBills = await DealerBill.find({}).select('items');
   const stockByProductId = new Map();
-  const productNameMap = new Map();
 
   products.forEach((product) => {
     stockByProductId.set(String(product._id), 0);
-
-    const normalizedName = normalizeProductName(product.productName);
-    if (!normalizedName) {
-      return;
-    }
-
-    const currentProducts = productNameMap.get(normalizedName) || [];
-    currentProducts.push(product);
-    productNameMap.set(normalizedName, currentProducts);
   });
 
   stockEntries.forEach((entry) => {
@@ -62,33 +45,6 @@ const syncCurrentStockValues = async () => {
       }
 
       stockByProductId.set(productId, Number(stockByProductId.get(productId) || 0) + quantity);
-    });
-  });
-
-  dealerBills.forEach((bill) => {
-    (bill.items || []).forEach((item) => {
-      let stockProductId = item?.stockProductId ? String(item.stockProductId) : '';
-
-      if (!stockProductId) {
-        const normalizedName = normalizeProductName(item?.productName);
-        const candidates = productNameMap.get(normalizedName) || [];
-
-        if (candidates.length === 1) {
-          stockProductId = String(candidates[0]._id);
-        } else if (candidates.length > 1) {
-          const exactMatch = candidates.find((product) => Number(product.mrp || 0) === Number(item?.mrp || 0));
-          if (exactMatch) {
-            stockProductId = String(exactMatch._id);
-          }
-        }
-      }
-
-      const quantity = Math.trunc(Number(item?.quantity || 0));
-      if (!stockProductId || !Number.isFinite(quantity)) {
-        return;
-      }
-
-      stockByProductId.set(stockProductId, Number(stockByProductId.get(stockProductId) || 0) - quantity);
     });
   });
 

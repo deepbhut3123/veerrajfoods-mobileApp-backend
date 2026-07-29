@@ -85,7 +85,7 @@ const dealerBillSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ['ordered', 'shipped', 'completed', 'cancelled'],
-      default: 'ordered',
+      default: 'shipped',
       required: true,
     },
     stockDeductedAt: {

@@ -376,10 +376,7 @@ const populateDealerBill = (query) =>
 
 const isStockDeductedDealerBill = (bill) => Boolean(bill?.stockDeductedAt);
 
-const shouldMaintainDeductedStock = (bill) => {
-  const normalizedStatus = String(bill?.status || '').toLowerCase();
-  return isStockDeductedDealerBill(bill) || ['shipped', 'completed'].includes(normalizedStatus);
-};
+const shouldMaintainDeductedStock = () => false;
 
 const createDealerBill = async (req, res) => {
   try {
@@ -396,7 +393,7 @@ const createDealerBill = async (req, res) => {
     const created = await DealerBill.create({
       userId: req.user._id,
       ...prepared.payload,
-      status: 'ordered',
+      status: 'shipped',
       stockDeductedAt: null,
     });
 
@@ -611,18 +608,6 @@ const deleteDealerBill = async (req, res) => {
       });
     }
 
-    if (isStockDeductedDealerBill(existingBill)) {
-      const stockAdjustment = await applyProductStockAdjustments(
-        buildQuantityMapFromBillItems(existingBill.items, 1)
-      );
-
-      if (stockAdjustment.error) {
-        return res.status(stockAdjustment.error.status).json({
-          success: false,
-          message: stockAdjustment.error.message,
-        });
-      }
-    }
 
     const deleted = await DealerBill.findByIdAndDelete(req.params.id);
 
@@ -662,7 +647,7 @@ const markDealerBillsAsShipped = async (req, res) => {
     }
 
     const existingBills = await DealerBill.find({ _id: { $in: billIds } }).select(
-      '_id status stockDeductedAt items'
+      '_id status'
     );
 
     if (existingBills.length === 0) {
@@ -684,22 +669,6 @@ const markDealerBillsAsShipped = async (req, res) => {
       });
     }
 
-    const stockAdjustment = await applyProductStockAdjustments(
-      updatableBills
-        .filter((bill) => !isStockDeductedDealerBill(bill))
-        .reduce(
-          (mergedMap, bill) =>
-            mergeQuantityMaps(mergedMap, buildQuantityMapFromBillItems(bill.items, -1)),
-          new Map()
-        )
-    );
-
-    if (stockAdjustment.error) {
-      return res.status(stockAdjustment.error.status).json({
-        success: false,
-        message: stockAdjustment.error.message,
-      });
-    }
 
     await DealerBill.updateMany(
       { _id: { $in: updatableBillIds } },
@@ -707,7 +676,7 @@ const markDealerBillsAsShipped = async (req, res) => {
         $set: {
           kattaCount: Math.trunc(kattaCount),
           status: 'shipped',
-          stockDeductedAt: new Date(),
+          stockDeductedAt: null,
         },
       },
     );
