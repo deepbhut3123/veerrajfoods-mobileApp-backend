@@ -4,6 +4,10 @@ const {
   getAdminDashboardSummary,
 } = require('../controllers/dashboardController');
 const {
+  getAccountDeletionRequests,
+  updateAccountDeletionRequest,
+} = require('../controllers/accountDeletionRequestController');
+const {
   getAllUsers,
   createUser,
   updateUser,
@@ -76,6 +80,8 @@ const router = express.Router();
 router.use(protect);
 
 router.get('/dashboard/summary', requireAdmin, getAdminDashboardSummary);
+router.get('/account-deletion-requests', requireAdmin, getAccountDeletionRequests);
+router.patch('/account-deletion-requests/:id', requireAdmin, updateAccountDeletionRequest);
 router.get('/attendance', requireAdmin, getAdminAttendance);
 router.put('/attendance/:id', requireAdmin, updateAdminAttendance);
 router.delete('/attendance/:id', requireAdmin, deleteAdminAttendance);
@@ -138,6 +144,9 @@ router.patch('/online/orders/:id/payment', requireAdmin, completeOnlineOrderPaym
 router.delete('/online/orders/:id', requireAdmin, deleteOnlineOrder);
 
 module.exports = router;
+
+
+
 
 
 

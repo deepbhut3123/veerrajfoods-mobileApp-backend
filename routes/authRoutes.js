@@ -1,5 +1,6 @@
 const express = require('express');
 const { protect } = require('../middlewares/authMiddleware');
+const { createAccountDeletionRequest } = require('../controllers/accountDeletionRequestController');
 const {
   register,
   login,
@@ -30,6 +31,9 @@ router.post('/attendance/check-in', protect, markMyAttendanceCheckIn);
 router.post('/attendance/check-out', protect, markMyAttendanceCheckOut);
 router.post('/attendance/break-in', protect, markMyAttendanceBreakIn);
 router.post('/attendance/break-out', protect, markMyAttendanceBreakOut);
+router.post('/account-deletion-request', protect, createAccountDeletionRequest);
 router.post('/logout', protect, logout);
 
 module.exports = router;
+
+
