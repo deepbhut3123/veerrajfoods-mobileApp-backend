@@ -17,12 +17,6 @@ const calculateAmountFromMargin = (rate, margin) => {
   return (normalizedRate * 100) / divisor;
 };
 
-const normalizeProductName = (value) =>
-  String(value || '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toLowerCase();
-
 const addQuantityToMap = (quantityMap, key, quantityDelta) => {
   if (!key) {
     return;
@@ -115,80 +109,6 @@ const applyProductStockAdjustments = async (quantityMap) => {
   );
 
   return { error: null };
-};
-
-const buildStockProductCatalog = async () => {
-  const products = await Product.find({}).select('_id productName mrp productRate');
-  const productMap = new Map(products.map((product) => [String(product._id), product]));
-  const productNameMap = new Map();
-
-  products.forEach((product) => {
-    const normalizedName = normalizeProductName(product.productName);
-    if (!normalizedName) {
-      return;
-    }
-
-    const existingProducts = productNameMap.get(normalizedName) || [];
-    existingProducts.push(product);
-    productNameMap.set(normalizedName, existingProducts);
-  });
-
-  return {
-    productMap,
-    productNameMap,
-  };
-};
-
-const resolveStockProduct = ({ stockProductId, productName, mrp }, stockCatalog) => {
-  const normalizedStockProductId = stockProductId ? String(stockProductId).trim() : '';
-  if (normalizedStockProductId && stockCatalog.productMap.has(normalizedStockProductId)) {
-    return {
-      product: stockCatalog.productMap.get(normalizedStockProductId),
-      reason: null,
-    };
-  }
-
-  const normalizedName = normalizeProductName(productName);
-  const candidates = stockCatalog.productNameMap.get(normalizedName) || [];
-
-  if (!candidates.length) {
-    return {
-      product: null,
-      reason: 'missing',
-    };
-  }
-
-  if (candidates.length === 1) {
-    return {
-      product: candidates[0],
-      reason: null,
-    };
-  }
-
-  const normalizedMrp = Number(mrp || 0);
-  const exactMrpMatches = candidates.filter((candidate) => Number(candidate.mrp || 0) === normalizedMrp);
-
-  if (exactMrpMatches.length === 1) {
-    return {
-      product: exactMrpMatches[0],
-      reason: null,
-    };
-  }
-
-  return {
-    product: null,
-    reason: 'ambiguous',
-  };
-};
-
-const getStockProductResolutionError = (productName, reason) => {
-  const label = String(productName || 'Unknown Product').trim() || 'Unknown Product';
-
-  if (reason === 'ambiguous') {
-    return `Multiple stock products matched "${label}". Please keep one unique stock product name or align MRP.`;
-  }
-
-  return `Stock product not found for "${label}". Please create the matching retailer stock product first.`;
 };
 
 const buildBillSearchValue = (bill) => {
@@ -299,7 +219,6 @@ const buildDealerBillPayload = async ({ dealerId, billDate, kattaCount, items })
   const products = uniqueProductIds.length
     ? await DealerProduct.find({ _id: { $in: uniqueProductIds } }).sort({ productName: 1 })
     : [];
-  const stockCatalog = await buildStockProductCatalog();
 
   if (products.length !== uniqueProductIds.length) {
     return {
@@ -311,7 +230,6 @@ const buildDealerBillPayload = async ({ dealerId, billDate, kattaCount, items })
   }
 
   const productMap = new Map(products.map((product) => [String(product._id), product]));
-  const stockResolutionErrors = [];
   const billItems = normalizedItems.map((item) => {
     const linkedProduct = item.productId ? productMap.get(String(item.productId)) : null;
     const quantity = Math.trunc(item.quantity);
@@ -323,21 +241,10 @@ const buildDealerBillPayload = async ({ dealerId, billDate, kattaCount, items })
       : linkedProduct
         ? calculateAmountFromMargin(rate, dealer.margin)
         : rate;
-    const stockResolution = resolveStockProduct(
-      {
-        productName,
-        mrp,
-      },
-      stockCatalog,
-    );
-
-    if (!stockResolution.product) {
-      stockResolutionErrors.push(getStockProductResolutionError(productName, stockResolution.reason));
-    }
 
     return {
       productId: linkedProduct?._id || null,
-      stockProductId: stockResolution.product?._id || null,
+      stockProductId: null,
       mrp,
       productName,
       productRate: rate,
@@ -346,15 +253,6 @@ const buildDealerBillPayload = async ({ dealerId, billDate, kattaCount, items })
       total: amount * quantity,
     };
   });
-
-  if (stockResolutionErrors.length) {
-    return {
-      error: {
-        status: 400,
-        message: [...new Set(stockResolutionErrors)].join(' | '),
-      },
-    };
-  }
 
   return {
     payload: {
