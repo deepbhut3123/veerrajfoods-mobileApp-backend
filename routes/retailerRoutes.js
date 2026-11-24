@@ -19,10 +19,12 @@ const {
 const {
   createShop,
   updateShop,
+  moveShopToRoute,
   deleteShop,
   getMyShops,
   getShopRoutes,
   getAllShops,
+  reorderRouteShops,
 } = require('../controllers/shopController');
 const {
   createBill,
@@ -59,9 +61,11 @@ router.patch('/products/reorder', requireAdmin, reorderProducts);
 router.delete('/products/:id', requireAdmin, deleteProduct);
 
 router.get('/shops/routes', getShopRoutes);
+router.patch('/routes/:id/shops/reorder', requireAdmin, reorderRouteShops);
 router.post('/shops', parseShopImageUpload, createShop);
 router.get('/shops/my-shops', getMyShops);
 router.put('/shops/:id', parseShopImageUpload, updateShop);
+router.patch('/shops/:id/route', requireAdmin, moveShopToRoute);
 router.delete('/shops/:id', deleteShop);
 router.get('/shops', requireAdmin, getAllShops);
 
